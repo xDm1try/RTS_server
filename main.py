@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import gc
 import uasyncio as asyncio
 from network_module.connection import connect
@@ -65,3 +66,6 @@ async def start_all():
 def main():
     asyncio.run(start_all())
     # start_all()
+=======
+# main.py -- put your code here!
+>>>>>>> dda62d4 (ints from bq25895)
