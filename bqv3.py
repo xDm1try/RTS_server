@@ -59,13 +59,21 @@ class BQ25895:
         self.i2c.writeto_mem(self.I2CADDR, reg, bytearray([value]))
 
     def reset(self):
-        self._set_bit(0x14, [1, None, None, None, None, None, None, None])
+        self._set_bit(0x14, [1, None, None, None, None, None, None, None])  # reset chip
+        # ADC Conversion Rate Selection  – Start 1s Continuous Conversion
         self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
-        self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])
-        self._set_bit(0x03, [None, 1, None, None, None, None, None, None])
+        self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])  # disable watchdog
+
+        # self._set_bit(0x14, [1, None, None, None, None, None, None, None])
+        # self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
+        # self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])
+        # self._set_bit(0x03, [None, 1, None, None, None, None, None, None])
 
         for i in range(21):
             regs[i] = self.read_byte(i)
+            
+    def sbc(self, mode):
+        self.set_charge_current(mode)
 
     def set_baterry_charge(self, mode: bool):
         if not mode:
@@ -74,10 +82,12 @@ class BQ25895:
             self.not_ce_pin.off()
 
     def _set_bit(self, reg, values):
+        assert len(values) == 8, f"Reg has 8 bit (not {len(values)})"
         if len(values) == 8:
             reg_val = self.read_byte(reg)
             reg_val_old = reg_val
 
+            values.reverse()
             for i, value in enumerate(values):
                 if value is not None:
                     mask = 1 << i
@@ -192,8 +202,20 @@ def handler_all_regs(bq: BQ25895):
         if new_val != old_val:
             print(f"INT: REG{hex(i)}: ", bq.get_byte_bin(old_val), " -> ", bq.get_byte_bin(new_val))
             regs[i] = new_val
+            
+    print("Ichg: ", bq.read_charge_current())
+    print("Vbat: ", bq.read_battery_volt())
     print("=" * 10)
 
+
+def get_current(bq: BQ25895, sleep: int, func = None):
+    import time
+    bq.set_baterry_charge(True)
+    time.sleep(sleep//2)
+    print("CURRENT: ", bq.read_charge_current())
+    time.sleep(sleep//2)
+    bq.set_baterry_charge(False)
+        
 
 # from bqv3 import *;bq = BQ25895(sda_pin=4, scl_pin=5, intr_pin=14, not_ce_pin=12, handler=handler_all_regs)
 
