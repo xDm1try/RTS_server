@@ -79,7 +79,7 @@ class BQ25895:
         self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
         self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])  # disable watchdog
         self.set_charge_enable(False)
-
+        self.set_batfet_mode(False)
         self.set_charge_current(64)
         self.set_charging_termination(False)
         self.set_charge_voltage(4176)
@@ -221,6 +221,14 @@ class BQ25895:
         mode: int = (reg_val & 0b10000000)
         return mode
 
+    def get_batfet_mode(self) -> None:
+        reg_val = self._read_byte(0x09)
+        mode = reg_val & 0b00100000
+        return mode
+
+    def set_batfet_mode(self, mode) -> None:
+        self._set_bit(0x09, [None, None, mode, None, None, None, None, None])
+
     def set_charge_voltage(self, voltage) -> None:
         assert 3840 <= voltage <= 4608, "Charge voltage must be in range [3840, 4608]"
         voltage_additional = voltage - 3840
@@ -243,6 +251,7 @@ class BQ25895:
         voltage_bin: int = (reg_val & 0b11111100) >> 2
         voltage = (voltage_bin * 16) + 3840
         return voltage
+
 
 
 def handler_all_regs(bq: BQ25895):
