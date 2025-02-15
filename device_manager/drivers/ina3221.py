@@ -140,6 +140,7 @@ C_BUS_ADC_LSB = 0.008             # VBus ADC LSB is 8mV
 C_SHUNT_ADC_LSB = 0.00004           # VShunt ADC LSB is 40µV
 
 
+
 class INA3221:
     """Driver class for Texas Instruments INA3221 3 channel current sensor device"""
 
@@ -257,6 +258,16 @@ class INA3221:
                    C_VBUS_CONV_TIME_1MS |
                    C_SHUNT_CONV_TIME_1MS |
                    C_MODE_SHUNT_AND_BUS_CONTINOUS)
+
+        self.update(reg=C_REG_CONFIG,
+                    mask=C_AVERAGING_MASK |
+                    C_VBUS_CONV_TIME_MASK |
+                    C_SHUNT_CONV_TIME_MASK |
+                    C_MODE_MASK,
+                    value=C_AVERAGING_1024_SAMPLES |
+                    C_VBUS_CONV_TIME_8MS |
+                    C_SHUNT_CONV_TIME_8MS |
+                    C_MODE_SHUNT_AND_BUS_CONTINOUS)
 
     def is_channel_enabled(self, channel=1):
         """Returns if a given channel is enabled or not"""

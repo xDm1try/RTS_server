@@ -24,13 +24,20 @@ regs = [None for _ in range(21)]
 class BQ25895:
     I2CADDR = 0x6A
 
-    def __init__(self, sda_pin, scl_pin, intr_pin, not_ce_pin, handler=None):
-        self.i2c = I2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=400000)
-        self.not_ce_pin = Pin(not_ce_pin, mode=Pin.OUT)
+    @classmethod
+    def is_enabled(self) -> bool:
+        return self.__class__ in self.i2c.scan()
+
+    def __init__(self, i2c: I2C, int_pin: Pin, handler=None):
+        # self.i2c = I2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=400000)
+        # self.not_ce_pin = Pin(not_ce_pin, mode=Pin.OUT)
+        # self._user_handler = handler
+        self.i2c = i2c
         self._user_handler = handler
+        self.pin_intr = int_pin
         self.reset()
         self.pg_stat_last = self._read_byte(0x0B) & 0b00000100
-        self.pin_intr = Pin(intr_pin, mode=Pin.IN, pull=Pin.PULL_UP)
+        # self.pin_intr = Pin(intr_pin, mode=Pin.IN, pull=Pin.PULL_UP)
         self.pin_intr.irq(trigger=Pin.IRQ_FALLING, handler=self._int_handler)
 
     def _int_handler(self, pin):
@@ -80,9 +87,9 @@ class BQ25895:
         self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])  # disable watchdog
         self.set_charge_enable(False)
         self.set_batfet_mode(False)
-        self.set_charge_current(64)
+        # self.set_charge_current(64)
         self.set_charging_termination(False)
-        self.set_charge_voltage(4176)
+        # self.set_charge_voltage(4176)
         # self._set_bit(0x14, [1, None, None, None, None, None, None, None])
         # self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
         # self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])
@@ -106,7 +113,7 @@ class BQ25895:
         ret = self._read_byte(0x0B)
         return ret >> 5
 
-    def input_type_str(self) -> str:
+    def get_input_type_str(self) -> str:
         return VBUS_TYPE[self.input_type()]
 
     def charge_state(self) -> int:
@@ -137,7 +144,7 @@ class BQ25895:
 
     def set_charge_current(self, m_A) -> None:
         assert 64 <= m_A <= 5056, f"Charge current range is [64, 5056] mA. ({m_A})"
-        assert m_A % 64 == 0, f"Charge current step is 64 mA ({m_A})"
+        m_A -= m_A % 64
         reg_val = int(m_A / 64)
         self._set_bit(0x04, [
             None,
@@ -156,9 +163,28 @@ class BQ25895:
         current = current_bin * 64
         return current
 
+    def set_precharge_threshold(self, precharge_mV) -> None:
+        assert precharge_mV == 2800 or precharge_mV == 3000, "Precharge to Fast Charge Threshold"
+        mode = 1 if precharge_mV == 3000 else 2800
+        self._set_bit(0x06, [
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            mode,
+            None,
+        ])
+
+    def get_precharge_threshold(self) -> int:
+        reg_val = self._read_byte(0x06)
+        mode = reg_val & 0b00000010
+        return 3000 if mode else 2800
+
     def set_current_cut_off(self, m_A) -> None:
         assert 64 <= m_A <= 1024, f"Cut off current must be in range [64, 1024] mA ({m_A})"
-        assert m_A % 64 == 0, f"Cut off current step is 64 mA ({m_A})"
+        m_A -= m_A % 64
 
         reg_val = m_A - 64
         reg_val = int(reg_val / 64)
@@ -182,7 +208,7 @@ class BQ25895:
 
     def set_current_precharge_limit(self, m_A):
         assert 64 <= m_A <= 1024, f"Precharge current must be in range [64, 1024] mA ({m_A})"
-        assert m_A % 64 == 0, f"Precharge current limit step is 64 mA ({m_A})"
+        m_A -= m_A % 64
 
         reg_val = m_A - 64
         reg_val = int(reg_val / 64)
@@ -215,7 +241,7 @@ class BQ25895:
             None,
             None
         ])
-        
+
     def get_charging_termination(self) -> int:
         reg_val: int = self._read_byte(0x07)
         mode: int = (reg_val & 0b10000000)
@@ -233,7 +259,7 @@ class BQ25895:
         assert 3840 <= voltage <= 4608, "Charge voltage must be in range [3840, 4608]"
         voltage_additional = voltage - 3840
         reg_val = int(voltage_additional / 16)
-        assert voltage % 16 == 0, "Charge voltage must be a multiple of 16 mV"
+        voltage -= voltage % 16
 
         self._set_bit(0x06, [
             1 if reg_val & 0b00100000 else 0,
@@ -251,7 +277,6 @@ class BQ25895:
         voltage_bin: int = (reg_val & 0b11111100) >> 2
         voltage = (voltage_bin * 16) + 3840
         return voltage
-
 
 
 def handler_all_regs(bq: BQ25895):
