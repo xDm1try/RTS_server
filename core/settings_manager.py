@@ -1,5 +1,5 @@
 
-class SettingsManager:
+class SettingsController:
     def __init__(self):
         self.device_settings_file = "/core/device_settings.env"
         self.server_settings_file = "/core/server_settings.env"
@@ -20,8 +20,8 @@ class SettingsManager:
         return new_dict
 
     def set_environ(self):
-        self.device_environ = SettingsManager.get_env_dict(self.device_settings_file)
-        self.server_environ = SettingsManager.get_env_dict(self.server_settings_file)
+        self.device_environ = SettingsController.get_env_dict(self.device_settings_file)
+        self.server_environ = SettingsController.get_env_dict(self.server_settings_file)
 
     def record_environments(self):
         self._write_environ(self.device_settings_file, self.device_environ)

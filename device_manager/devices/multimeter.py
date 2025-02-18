@@ -1,6 +1,6 @@
 from machine import I2C, PIN
-from device_manager.interfaces.multimeter_abc import MultimeterABC
-from device_manager.drivers.ina3221 import INA3221
+from device_Controller.interfaces.multimeter_abc import MultimeterABC
+from device_Controller.drivers.ina3221 import INA3221
 
 
 class MultimeterINA3221(MultimeterABC):

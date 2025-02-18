@@ -1,6 +1,6 @@
 from machine import PWM, PIN
-from device_manager.interfaces.load_abc import LoadABC
-from device_manager.drivers.l298n import L298N_short
+from device_Controller.interfaces.load_abc import LoadABC
+from device_Controller.drivers.l298n import L298N_short
 
 
 class LoadL298N(LoadABC):
