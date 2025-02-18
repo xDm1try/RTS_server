@@ -2,8 +2,7 @@ from machine import Pin, PWM
 
 
 class L298N_short:
-    def __init__(self, in1_pin: Pin, pwm_pim: Pin, freq: int):
-        self.IN1 = in1_pin
+    def __init__(self, pwm_pim: PWM, freq: int):
         self.pwm = pwm_pim
         self.freq = freq
         self.duty = 0

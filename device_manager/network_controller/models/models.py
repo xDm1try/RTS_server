@@ -11,6 +11,7 @@ class AnnounceResponse:
         self.device_name = device_name
         self.device_ip = device_ip
 
+
 class AnnounceAnswer:
     def __init__(self):
         pass

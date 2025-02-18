@@ -1,9 +1,9 @@
 from machine import I2C
 from machine import Pin
-from device_Controller.drivers.bq25895 import BQ25895
-from device_Controller.interfaces.charger_abc import ChargerABC
-from device_Controller.interfaces.charger_abc import ChargerStatus
-from device_Controller.interfaces.charger_abc import ChargerSettings
+from device_manager.drivers.bq25895 import BQ25895
+from device_manager.interfaces.charger_abc import ChargerABC
+from device_manager.interfaces.charger_abc import ChargerStatus
+from device_manager.interfaces.charger_abc import ChargerSettings
 
 
 class ChargerBQ(ChargerABC):

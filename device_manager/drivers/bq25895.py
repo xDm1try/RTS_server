@@ -25,8 +25,8 @@ class BQ25895:
     I2CADDR = 0x6A
 
     @classmethod
-    def is_enabled(self) -> bool:
-        return self.__class__ in self.i2c.scan()
+    def is_enabled(cls, i2c) -> bool:
+        return cls.I2CADDR in i2c.scan()
 
     def __init__(self, i2c: I2C, int_pin: Pin, handler=None):
         # self.i2c = I2C(scl=Pin(scl_pin), sda=Pin(sda_pin), freq=400000)

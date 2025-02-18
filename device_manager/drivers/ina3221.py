@@ -53,7 +53,6 @@ __repo__ = "https://github.com/neaxi/MicroPython_INA3221"
 
 # pylint: disable=bad-whitespace
 
-_DEFAULT_ADDRESS = const(0x40)
 
 #
 # Registers and bits definitions
@@ -140,11 +139,11 @@ C_BUS_ADC_LSB = 0.008             # VBus ADC LSB is 8mV
 C_SHUNT_ADC_LSB = 0.00004           # VShunt ADC LSB is 40µV
 
 
-
 class INA3221:
     """Driver class for Texas Instruments INA3221 3 channel current sensor device"""
 
     IS_FULL_API = True
+    _DEFAULT_ADDRESS = const(0x40)
 
     @staticmethod
     def _to_signed(val):
@@ -157,6 +156,10 @@ class INA3221:
         if val < 0:
             return val + 65536
         return val
+
+    @classmethod
+    def is_enabled(cls, i2c) -> bool:
+        return cls._DEFAULT_ADDRESS in i2c.scan()
 
     def write(self, reg, value):
         """Write value in device register"""
@@ -254,6 +257,7 @@ class INA3221:
         self.i2c_device = i2c_instance
         self.i2c_addr = i2c_addr
         self.shunt_resistor = shunt_resistor
+        self.is_enabled()
         self.write(C_REG_CONFIG,  C_AVERAGING_16_SAMPLES |
                    C_VBUS_CONV_TIME_1MS |
                    C_SHUNT_CONV_TIME_1MS |
