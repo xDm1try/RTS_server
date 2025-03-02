@@ -1,4 +1,4 @@
-from machine import I2C, PIN
+from machine import I2C, Pin
 from device_manager.interfaces.multimeter_abc import MultimeterABC
 from device_manager.drivers.ina3221 import INA3221
 

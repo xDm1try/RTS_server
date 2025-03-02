@@ -4,13 +4,15 @@ import ntptime
 import urequests
 import asyncio
 import json
-from device_manager.network_controller.models.models import UdpRequest, UdpResponse
+from device_manager.network_controller.models.models import AnnounceRequest, AnnounceResponse
+
 
 class ConnectionController:
     def __init__(self, device_name, wifi_name, wifi_passw):
         self.device_name = device_name
         self.wifi_name = wifi_name
         self.wifi_passw = wifi_passw
+        self.wlan = network.WLAN(network.STA)
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
         self.cfg = None
@@ -74,7 +76,7 @@ class ConnectionController:
             self.connect()
         self._udp_handler_task = asyncio.create_task(self.handler_udp(port))
 
-    async def udp_handler(self, broadcast_addr, port):
+    async def udp_hander(self, broadcast_addr, port):
         print(f"UDP server started on {self.cfg}")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setblocking(False)  # Неблокирующий режим
@@ -88,8 +90,8 @@ class ConnectionController:
                 data, addr = sock.recvfrom(1024)
                 if data:
                     print("UDP data received from {}: {}".format(addr, data))
-                    data_dict: UdpRequest = json.loads(data)
-                    self.set_udp_request(UdpRequest(data_dict.server_ip, data_dict.server_port))
+                    data_dict: AnnounceRequest = json.loads(data)
+                    self.set_udp_request(AnnounceRequest(data_dict.server_ip, data_dict.server_port))
                     self.send_udp_response()
             except OSError as e:
                 if e.errno == 11:  # EAGAIN - нет данных для чтения
@@ -100,26 +102,26 @@ class ConnectionController:
         print("UDP server ended")
         sock.close()
 
-    async def set_udp_response(self, response: UdpResponse) -> None:
+    async def set_udp_response(self, response: AnnounceResponse) -> None:
         async with self._lock:
             self.udp_response = response
 
-    async def get_udp_response(self) -> UdpResponse | None:
+    async def get_udp_response(self) -> AnnounceResponse | None:
         async with self._lock:
             self.udp_response
 
-    async def set_udp_request(self, request: UdpRequest) -> None:
+    async def set_udp_request(self, request: AnnounceRequest) -> None:
         async with self._lock:
             self.udp_request = request
 
-    async def get_udp_request(self) -> UdpRequest | None:
+    async def get_udp_request(self) -> AnnounceRequest | None:
         async with self._lock:
             return self.udp_request
 
     async def send_udp_response(self) -> None:
         try:
-            response: UdpResponse = self.get_udp_response()
-            server_data: UdpRequest = self.get_udp_request()
+            response: AnnounceResponse = self.get_udp_response()
+            server_data: AnnounceRequest = self.get_udp_request()
             if response is None or server_data is None:
                 raise Exception("Udp response is None")
 

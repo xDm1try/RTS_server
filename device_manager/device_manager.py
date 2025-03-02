@@ -3,7 +3,10 @@ from device_manager.devices.charger_bq import ChargerBQ
 from device_manager.devices.load_l298n import LoadL298N
 from device_manager.devices.multimeter import MultimeterINA3221
 from device_manager.devices.temperature_sensors import TemperatureSensors
-from machine import Pin, I2C, OneWire, PWM
+from device_manager.interfaces.charger_abc import ChargerSettings, ChargerStatus
+from device_manager.enums import TemperatureOf
+from machine import Pin, I2C, PWM
+from onewire import OneWire
 
 
 class DeviceSettings:
@@ -12,9 +15,9 @@ class DeviceSettings:
                  device_port: int, i2c_sda: int,
                  i2c_scl: int, charger_intr: int,
                  temp_pin: int,
-                 temp_bat_addr,
-                 temp_load_addr,
-                 temp_env_addr,
+                 temp_bat_addr: str,
+                 temp_load_addr: str,
+                 temp_env_addr: str,
                  pwm_pin: int):
         self.device_name = device_name
         self.device_port = device_port
@@ -28,30 +31,77 @@ class DeviceSettings:
         self.pwm_pin = pwm_pin
 
 
-class DeviceController:
+class DeviceManager:
 
     def __init__(self, settings: DeviceSettings = None):
         assert settings, "No settings in DeviceController"
         self.settings = settings
-
-        self.start_controllers(self.settings)
-
-    def start_controllers(self, settings: DeviceSettings):
-        self.connection_c = ConnectionController(settings.device_name)
-        self.connection_c.run_udp_handler(settings.device_port)
-
         self.i2c_bus = I2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
-        self.charger = ChargerBQ(self.i2c_bus, Pin(settings.charger_intr))
-
-        self.multimeter = MultimeterINA3221(self.i2c_bus)
-
         self.onewire = OneWire(Pin(settings.temp_pin))
+        self.pwm = Pin(self.settings.pwm_pin)
+
+        # self.init_all_devices()
+
+    def init_all_devices(self):
+        self._init_network()
+
+        self._init_charger()
+
+        self._init_multimeter()
+
+        self._init_temperature_sensors()
+
+        self._init_load()
+
+    def _init_network(self):
+        self.connection_c = ConnectionController(self.settings.device_name)
+        self.connection_c.run_udp_handler(self.settings.device_port)
+
+    def _init_load(self):
+        self.load = LoadL298N(self.pwm)
+
+    def _init_temperature_sensors(self):
         self.temp_sensors = TemperatureSensors()
 
-        self.load = LoadL298N(Pin(settings.pwm_pin))
+    def _init_charger(self):
+        self.charger = ChargerBQ(self.i2c, Pin(self.settings.charger_intr))
 
-    def stop_controllers(self):
+    def _init_multimeter(self):
+        self.multimeter = MultimeterINA3221(self.i2c_bus)
+
+    def _stop_udp_handler(self):
         self.connection_c.stop_udp_handler()
 
-    def get_temperature(self):
-        ...
+    async def get_temperatures(self) -> dict[str, float]:
+        d = await self.temp_sensors.read_temperature()
+        d[TemperatureOf.BATTERY] = d[self.settings.temp_bat_addr]
+        d[TemperatureOf.ENVIRONMENT] = d[self.settings.temp_env_addr]
+        d[TemperatureOf.LOAD] = d[self.settings.temp_load_addr]
+        return d
+
+    async def get_battery_mV(self) -> int:
+        return self.multimeter.get_battery_mV()
+
+    async def get_battery_mA(self) -> int:
+        return self.multimeter.get_battery_mA()
+
+    async def get_load_duty(self) -> int:
+        return self.load.get_duty()
+
+    async def set_load_duty(self, duty: int) -> None:
+        return self.load.set_duty(duty)
+
+    async def start_charging(self, settings: ChargerSettings):
+        self.charger.start_charging(settings)
+
+    async def stop_charging(self):
+        self.charger.terminate_charging()
+
+    async def get_charging_settings(self) -> ChargerSettings:
+        return self.charger.get_charger_settings()
+
+    async def get_charging_status(self) -> ChargerStatus:
+        return self.charger.get_charger_settings()
+
+    async def reset_charger(self) -> None:
+        self.charger.reset()

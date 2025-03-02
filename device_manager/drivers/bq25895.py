@@ -100,14 +100,10 @@ class BQ25895:
 
     def set_charge_enable(self, mode: bool) -> None:
         self._set_bit(0x03, [None, None, None, mode, None, None, None, None])
-        if not mode:
-            self.not_ce_pin.on()
-        else:
-            self.not_ce_pin.off()
 
     def get_charge_enable(self) -> bool:
         value = int(self.get_reg_bin(0x03)[3])
-        return value and not self.not_ce_pin.value()
+        return value
 
     def input_type(self) -> int:
         ret = self._read_byte(0x0B)
