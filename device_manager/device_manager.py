@@ -1,9 +1,8 @@
 from device_manager.network_controller.connection_controller import ConnectionController
-from device_manager.devices.charger_bq import ChargerBQ
+from device_manager.devices.charger_bq import ChargerBQ, ChargerSettings, ChargerStatus
 from device_manager.devices.load_l298n import LoadL298N
 from device_manager.devices.multimeter import MultimeterINA3221
 from device_manager.devices.temperature_sensors import TemperatureSensors
-from device_manager.interfaces.charger_abc import ChargerSettings, ChargerStatus
 from device_manager.enums import TemperatureOf
 from machine import Pin, I2C, PWM
 from onewire import OneWire

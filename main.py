@@ -1,3 +1,8 @@
+# from device_manager.devices.charger_bq import ChargerBQ
+# from device_manager.devices.load_l298n import L298N_short
+# from device_manager.devices.multimeter import MultimeterINA3221
+# from device_manager.devices
+
 
 # s = DeviceSettings(
 #     device_name="NodeMCUv3#1",

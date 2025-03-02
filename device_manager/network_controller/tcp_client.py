@@ -13,5 +13,3 @@ class TcpClient:
             ...
 
         self._tcp_client_task = asyncio.start_server(self.tcp_request_handler, ip, port)
-
-    async def set

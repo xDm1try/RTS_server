@@ -1,9 +1,8 @@
 from machine import I2C, Pin
-from device_manager.interfaces.multimeter_abc import MultimeterABC
 from device_manager.drivers.ina3221 import INA3221
 
 
-class MultimeterINA3221(MultimeterABC):
+class MultimeterINA3221:
     def __init__(self, i2c: I2C, channel: int = 1, addr: int = 0x40):
         self.channel = channel
         if INA3221.is_enabled(i2c):

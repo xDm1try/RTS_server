@@ -1,9 +1,8 @@
 from machine import PWM, Pin
-from device_manager.interfaces.load_abc import LoadABC
 from device_manager.drivers.l298n import L298N_short
 
 
-class LoadL298N(LoadABC):
+class LoadL298N:
     def __init__(self, pwm_pin: PWM, freq=15000):
         self.pwm = pwm_pin
         self.freq = freq
