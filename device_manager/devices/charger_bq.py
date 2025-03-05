@@ -7,11 +7,13 @@ class ChargerSettings:
     def __init__(self,
                  const_current_mA: int = 130,
                  const_volt_mV: int = 4200,
-                 cut_off_current_mA: int = 20
+                 cut_off_current_mA: int = 20,
+                 temp_bat_limit: int = 50,
                  ):
         self.const_current_mA: int = const_current_mA
         self.const_volt_mV: int = const_volt_mV
         self.cut_off_current_mA: int = cut_off_current_mA
+        self.temp_bat_limit: int = temp_bat_limit
 
     def __repr__(self) -> str:
         return (
@@ -19,6 +21,7 @@ class ChargerSettings:
             f"const_current_mA={self.const_current_mA!r}\n"
             f"const_volt_mV={self.const_volt_mV!r}\n"
             f"cut_off_current_mA={self.cut_off_current_mA!r}\n"
+            f"temp_bat_limit={self.temp_bat_limit!r}\n"
         )
 
 

@@ -1,6 +1,8 @@
 """This file is executed on every boot (including wake-boot from deepsleep)"""
+from main import main
 import os
 import machine
+import asyncio
 # from main_former import main
 # import esp
 # esp.osdebug(None)
@@ -9,3 +11,5 @@ import machine
 # webrepl.start()
 import gc
 gc.collect()
+
+# asyncio.run(main())

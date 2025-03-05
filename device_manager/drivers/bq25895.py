@@ -95,8 +95,8 @@ class BQ25895:
         # self._set_bit(0x07, [None, None, 0, 0, None, None, None, None])
         # self._set_bit(0x03, [None, 1, None, None, None, None, None, None])
 
-        for i in range(21):
-            regs[i] = self._read_byte(i)
+        # for i in range(21):
+        #     regs[i] = self._read_byte(i)
 
     def set_charge_enable(self, mode: bool) -> None:
         self._set_bit(0x03, [None, None, None, mode, None, None, None, None])

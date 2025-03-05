@@ -3,7 +3,7 @@ from device_manager.devices.charger_bq import ChargerBQ, ChargerSettings, Charge
 from device_manager.devices.load_l298n import LoadL298N
 from device_manager.devices.multimeter import MultimeterINA3221
 from device_manager.devices.temperature_sensors import TemperatureSensors
-from device_manager.enums import TemperatureOf
+from device_manager.network_controller.models.models import AnnounceRequest
 from machine import Pin, I2C, PWM
 from onewire import OneWire
 
@@ -30,7 +30,20 @@ class DeviceSettings:
         self.pwm_pin = pwm_pin
 
 
+class TemperatureOf:
+    BATTERY = "BAT"
+    LOAD = "LOAD"
+    ENVIRONMENT = "ENV"
+
+
 class DeviceManager:
+    SENSOR_LOOP = None
+
+    BUSY = "device is busy"
+    ERROR = "error happend"
+    OK = "ok"
+
+    STATUS = OK
 
     def __init__(self, settings: DeviceSettings = None):
         assert settings, "No settings in DeviceController"
@@ -71,6 +84,9 @@ class DeviceManager:
     def _stop_udp_handler(self):
         self.connection_c.stop_udp_handler()
 
+    def get_device_ip(self) -> str:
+        return self.connection_c.get_device_ip()
+
     async def get_temperatures(self) -> dict[str, float]:
         d = await self.temp_sensors.read_temperature()
         d[TemperatureOf.BATTERY] = d[self.settings.temp_bat_addr]
@@ -100,7 +116,14 @@ class DeviceManager:
         return self.charger.get_charger_settings()
 
     async def get_charging_status(self) -> ChargerStatus:
-        return self.charger.get_charger_settings()
+        return self.charger.get_charger_status()
+
+    async def get_udp_request(self) -> AnnounceRequest:
+        return await self.connection_c.get_udp_request()
 
     async def reset_charger(self) -> None:
         self.charger.reset()
+
+    async def reset_all(self) -> None:
+        self.charger.reset()
+        self.load.set_duty(0)

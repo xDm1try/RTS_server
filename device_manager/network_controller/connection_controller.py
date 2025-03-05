@@ -1,10 +1,11 @@
 import socket
+import time
 import network
 import ntptime
 import urequests
 import asyncio
 import json
-from device_manager.network_controller.models.models import AnnounceRequest, AnnounceResponse
+from device_manager.network_controller.models.models import AnnounceRequest, HeartBeatResponse
 
 
 class ConnectionController:
@@ -12,7 +13,6 @@ class ConnectionController:
         self.device_name = device_name
         self.wifi_name = wifi_name
         self.wifi_passw = wifi_passw
-        self.wlan = network.WLAN(network.STA)
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
         self.cfg = None
@@ -22,7 +22,7 @@ class ConnectionController:
         self._lock = asyncio.Lock()
         self.connect()
 
-    async def connect(self) -> None:
+    async def a_connect(self) -> None:
         self.wlan.connect(self.wifi_name, self.wifi_passw)
         while True:
             if self.wlan.isconnected():
@@ -31,10 +31,20 @@ class ConnectionController:
             else:
                 print(f'Connecting to WIFI ({self.wifi_name})...')
                 await asyncio.sleep(0.3)
+                
+    def connect(self) -> None:
+        self.wlan.connect(self.wifi_name, self.wifi_passw)
+        while True:
+            if self.wlan.isconnected():
+                ntptime.settime()
+                break
+            else:
+                print(f'Connecting to WIFI ({self.wifi_name})...')
+                time.sleep(0.3)
 
         self.cfg = self.wlan.ipconfig('addr4')
 
-    async def get_device_ip(self) -> str | None:
+    def get_device_ip(self) -> str | None:
         self.check_connection()
         if self.cfg is not None:
             return self.cfg[0]
@@ -63,10 +73,10 @@ class ConnectionController:
     def disconnect(self):
         raise Exception("Network Controller has no disconnect yet.")
 
-    async def check_connection(self) -> bool:
+    def check_connection(self) -> bool:
         return self.wlan.isconnected()
 
-    async def stop_udp_handler(self) -> None:
+    def stop_udp_handler(self) -> None:
         if self._udp_handler_task is not None:
             self._udp_handler_task.cancel()
             self._udp_handler_task = None
@@ -74,7 +84,7 @@ class ConnectionController:
     def run_udp_handler(self, port) -> None:
         while not self.wlan.isconnected():
             self.connect()
-        self._udp_handler_task = asyncio.create_task(self.handler_udp(port))
+        self._udp_handler_task = asyncio.create_task(self.udp_hander(port))
 
     async def udp_hander(self, broadcast_addr, port):
         print(f"UDP server started on {self.cfg}")
@@ -92,7 +102,7 @@ class ConnectionController:
                     print("UDP data received from {}: {}".format(addr, data))
                     data_dict: AnnounceRequest = json.loads(data)
                     self.set_udp_request(AnnounceRequest(data_dict.server_ip, data_dict.server_port))
-                    self.send_udp_response()
+                    # self.send_udp_response()
             except OSError as e:
                 if e.errno == 11:  # EAGAIN - нет данных для чтения
                     await asyncio.sleep(0.1)  # Ждем немного перед повторной проверкой
@@ -102,11 +112,11 @@ class ConnectionController:
         print("UDP server ended")
         sock.close()
 
-    async def set_udp_response(self, response: AnnounceResponse) -> None:
+    async def set_udp_response(self, response: HeartBeatResponse) -> None:
         async with self._lock:
             self.udp_response = response
 
-    async def get_udp_response(self) -> AnnounceResponse | None:
+    async def get_udp_response(self) -> HeartBeatResponse | None:
         async with self._lock:
             self.udp_response
 
@@ -118,26 +128,26 @@ class ConnectionController:
         async with self._lock:
             return self.udp_request
 
-    async def send_udp_response(self) -> None:
-        try:
-            response: AnnounceResponse = self.get_udp_response()
-            server_data: AnnounceRequest = self.get_udp_request()
-            if response is None or server_data is None:
-                raise Exception("Udp response is None")
+    # async def send_udp_response(self) -> None:
+    #     try:
+    #         response: HeartBeatResponse = self.get_udp_response()
+    #         server_data: AnnounceRequest = self.get_udp_request()
+    #         if response is None or server_data is None:
+    #             raise Exception("Udp response is None")
 
-            data = response.__dict__
+    #         data = response.__dict__
 
-            json_data = json.dumps(data)
+    #         json_data = json.dumps(data)
 
-            try:
+    #         try:
 
-                url = f"http://{server_data.server_ip}:{server_data.server_port}/annoncement_resp"
-                # print(url)
-                response = urequests.post(url,
-                                          data=json_data,
-                                          headers={"Content-Type": "application/json"})
-                print(response.json())
-            except Exception as e:
-                print("Exc2 in send_task_response ", e)
-        except Exception as e:
-            print("Exc in send_task_response ", e)
+    #             url = f"http://{server_data.server_ip}:{server_data.server_port}/annoncement_resp"
+    #             # print(url)
+    #             response = urequests.post(url,
+    #                                       data=json_data,
+    #                                       headers={"Content-Type": "application/json"})
+    #             print(response.json())
+    #         except Exception as e:
+    #             print("Exc2 in send_task_response ", e)
+    #     except Exception as e:
+    #         print("Exc in send_task_response ", e)
