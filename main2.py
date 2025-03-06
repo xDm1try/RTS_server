@@ -1,6 +1,6 @@
 
 import time
-from device_manager.device_manager import DeviceManager, DeviceSettings
+from device_manager.device_manager import DeviceSettings  # ,DeviceManager
 import asyncio
 from route_handlers.charge import start_charger_handler, stop_charge_handler
 from route_handlers.load import set_load_duty_handler
@@ -39,7 +39,7 @@ while not wlan.isconnected():
 ntptime.settime()
 
 cfg = wlan.ipconfig('addr4')
-device_manager = DeviceManager(cfg, s)
+# device_manager = DeviceManager(cfg, s)
 print(cfg)
 
 app = Microdot()
@@ -102,6 +102,6 @@ async def reboot_route(request):
 
 
 async def main():
-    corut = app.start_server("0.0.0.0", s.device_port)
-    server = asyncio.create_task(corut)
-    await server
+    asyncio.create_task(app.start_server("0.0.0.0", 21216))
+    while True:
+        await asyncio.sleep()
