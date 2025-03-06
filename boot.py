@@ -1,9 +1,9 @@
 """This file is executed on every boot (including wake-boot from deepsleep)"""
-from main import main
+
 import os
 import machine
 import asyncio
-# from main_former import main
+
 # import esp
 # esp.osdebug(None)
 # os.dupterm(None, 1) # disable REPL on UART(0)

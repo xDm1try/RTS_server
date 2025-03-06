@@ -1,25 +1,36 @@
-from device_manager.network_controller.connection_controller import ConnectionController
+# from device_manager.network_controller.connection_controller import ConnectionController
 from device_manager.devices.charger_bq import ChargerBQ, ChargerSettings, ChargerStatus
 from device_manager.devices.load_l298n import LoadL298N
 from device_manager.devices.multimeter import MultimeterINA3221
 from device_manager.devices.temperature_sensors import TemperatureSensors
-from device_manager.network_controller.models.models import AnnounceRequest
+from device_manager.network_controller.models.models import HeartBeatResponse
 from machine import Pin, I2C, PWM
 from onewire import OneWire
 
 
 class DeviceSettings:
 
-    def __init__(self, device_name: str,
+    def __init__(self,
+                 server_ip: str,
+                 server_port: int,
+                 wifi_name: str,
+                 wifi_passw: str,
+                 device_name: str,
                  device_port: int, i2c_sda: int,
                  i2c_scl: int, charger_intr: int,
                  temp_pin: int,
                  temp_bat_addr: str,
                  temp_load_addr: str,
                  temp_env_addr: str,
+                 broadcast_port: int,
                  pwm_pin: int):
+        self.server_ip = server_ip
+        self.server_port = server_port
+        self.wifi_name = wifi_name
+        self.wifi_passw = wifi_passw
         self.device_name = device_name
         self.device_port = device_port
+        self.broadcast_port = broadcast_port
         self.i2c_sda = i2c_sda
         self.i2c_scl = i2c_scl
         self.charger_intr = charger_intr
@@ -45,9 +56,10 @@ class DeviceManager:
 
     STATUS = OK
 
-    def __init__(self, settings: DeviceSettings = None):
+    def __init__(self, device_ip, settings: DeviceSettings):
         assert settings, "No settings in DeviceController"
-        self.settings = settings
+        self.settings: DeviceSettings = settings
+        self.dev_ip = device_ip
         self.i2c_bus = I2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
         self.pwm = Pin(self.settings.pwm_pin)
@@ -55,7 +67,6 @@ class DeviceManager:
         # self.init_all_devices()
 
     def init_all_devices(self):
-        self._init_network()
 
         self._init_charger()
 
@@ -65,9 +76,13 @@ class DeviceManager:
 
         self._init_load()
 
-    def _init_network(self):
-        self.connection_c = ConnectionController(self.settings.device_name)
-        self.connection_c.run_udp_handler(self.settings.device_port)
+    # def _init_network(self):
+    #     self.connection_c = ConnectionController(
+    #         self.settings.device_name, self.settings.wifi_name, self.settings.wifi_passw)
+    #     self.connection_c.run_udp_handler(self.settings.broadcast_port)
+
+    # def _stop_udp_handler(self):
+    #     self.connection_c.stop_udp_handler()
 
     def _init_load(self):
         self.load = LoadL298N(self.pwm)
@@ -81,11 +96,10 @@ class DeviceManager:
     def _init_multimeter(self):
         self.multimeter = MultimeterINA3221(self.i2c_bus)
 
-    def _stop_udp_handler(self):
-        self.connection_c.stop_udp_handler()
+
 
     def get_device_ip(self) -> str:
-        return self.connection_c.get_device_ip()
+        return self.dev_ip
 
     async def get_temperatures(self) -> dict[str, float]:
         d = await self.temp_sensors.read_temperature()
@@ -118,12 +132,18 @@ class DeviceManager:
     async def get_charging_status(self) -> ChargerStatus:
         return self.charger.get_charger_status()
 
-    async def get_udp_request(self) -> AnnounceRequest:
-        return await self.connection_c.get_udp_request()
-
     async def reset_charger(self) -> None:
         self.charger.reset()
 
     async def reset_all(self) -> None:
         self.charger.reset()
         self.load.set_duty(0)
+
+    async def get_status(self) -> HeartBeatResponse:
+        status = self.STATUS
+        name = self.settings.device_name
+        ip = self.get_device_ip()
+        ch_status = self.get_charging_status()
+
+        resp = HeartBeatResponse(device_status=status, device_name=name, device_ip=ip, charger_status=ch_status)
+        return resp

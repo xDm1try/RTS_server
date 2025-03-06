@@ -1,12 +1,6 @@
 from device_manager.devices.charger_bq import ChargerStatus
 
 
-class AnnounceRequest:
-    def __init__(self, server_ip: str, server_port: int):
-        self.server_ip = server_ip
-        self.server_port = server_port
-
-
 class HeartBeatResponse:
     def __init__(self, device_status: str, device_name: str, device_ip: str, charger_status: ChargerStatus):
         self.device_status = device_status
@@ -40,3 +34,13 @@ class TestData:
         self.bat_current = bat_current
         self.load_duty = load_duty
         self.charge_status = charge_status
+
+
+class SetDuty:
+    def __init__(self, new_duty):
+        self.new_duty = new_duty
+
+
+class StartCharge:
+    def __init__(self, charge_settings):
+        self.charge_settings = charge_settings
