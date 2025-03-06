@@ -257,6 +257,8 @@ class INA3221:
         self.i2c_device = i2c_instance
         self.i2c_addr = i2c_addr
         self.shunt_resistor = shunt_resistor
+        self.battery_channel = 1
+        self.load_channel = 2
         self.is_enabled()
         self.write(C_REG_CONFIG,  C_AVERAGING_16_SAMPLES |
                    C_VBUS_CONV_TIME_1MS |
@@ -332,6 +334,19 @@ class INA3221:
         assert 1 <= channel <= 3, "channel argument must be 1, 2, or 3"
         value = self._to_unsigned(round(voltage * C_SHUNT_ADC_LSB) * 8)
         self.write(C_REG_WARNING_ALERT_LIMIT_CH[channel], value)
+        
+    def get_battery_mV(self) -> int:
+        self.bus_voltage(self.battery_channel) * 1000
+
+    def get_battery_mA(self) -> int:
+        self.current(self.battery_channel) * 1000
+        
+        
+    def get_load_mV(self) -> int:
+        self.bus_voltage(self.load_channel) * 1000
+
+    def get_load_mA(self) -> int:
+        self.current(self.load_channel) * 1000
 
     @property
     def is_ready(self):

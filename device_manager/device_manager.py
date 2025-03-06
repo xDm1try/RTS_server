@@ -1,9 +1,8 @@
-# from device_manager.network_controller.connection_controller import ConnectionController
-from device_manager.devices.charger_bq import ChargerBQ, ChargerSettings, ChargerStatus
-from device_manager.devices.load_l298n import LoadL298N
-from device_manager.devices.multimeter import MultimeterINA3221
-from device_manager.devices.temperature_sensors import TemperatureSensors
-from device_manager.network_controller.models.models import HeartBeatResponse
+from device_manager.drivers.l298n import L298N_short
+from device_manager.drivers.bq25895 import BQ25895, ChargerSettings, ChargerStatus
+from device_manager.drivers.ina3221 import INA3221
+from device_manager.drivers.temperature_sensors import TemperatureSensors
+from models import HeartBeatResponse
 from machine import Pin, I2C, PWM
 from onewire import OneWire
 
@@ -76,27 +75,17 @@ class DeviceManager:
 
         self._init_load()
 
-    # def _init_network(self):
-    #     self.connection_c = ConnectionController(
-    #         self.settings.device_name, self.settings.wifi_name, self.settings.wifi_passw)
-    #     self.connection_c.run_udp_handler(self.settings.broadcast_port)
-
-    # def _stop_udp_handler(self):
-    #     self.connection_c.stop_udp_handler()
-
     def _init_load(self):
-        self.load = LoadL298N(self.pwm)
+        self.load = L298N_short(self.pwm)
 
     def _init_temperature_sensors(self):
         self.temp_sensors = TemperatureSensors()
 
     def _init_charger(self):
-        self.charger = ChargerBQ(self.i2c, Pin(self.settings.charger_intr))
+        self.charger: BQ25895 = BQ25895(self.i2c, Pin(self.settings.charger_intr))
 
     def _init_multimeter(self):
-        self.multimeter = MultimeterINA3221(self.i2c_bus)
-
-
+        self.multimeter: INA3221 = INA3221(self.i2c_bus)
 
     def get_device_ip(self) -> str:
         return self.dev_ip
@@ -124,18 +113,18 @@ class DeviceManager:
         self.charger.start_charging(settings)
 
     async def stop_charging(self):
-        self.charger.terminate_charging()
+        self.charger.set_charge_enable(False)
 
-    async def get_charging_settings(self) -> ChargerSettings:
-        return self.charger.get_charger_settings()
+    def get_charging_settings(self) -> ChargerSettings:
+        return BQ25895.charge_settings
 
-    async def get_charging_status(self) -> ChargerStatus:
+    def get_charging_status(self) -> ChargerStatus:
         return self.charger.get_charger_status()
 
-    async def reset_charger(self) -> None:
+    def reset_charger(self) -> None:
         self.charger.reset()
 
-    async def reset_all(self) -> None:
+    def reset_all(self) -> None:
         self.charger.reset()
         self.load.set_duty(0)
 

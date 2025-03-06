@@ -1,4 +1,5 @@
 import asyncio
+from machine import Pin
 from onewire import OneWire
 from ds18x20 import DS18X20
 

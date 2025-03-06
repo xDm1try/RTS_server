@@ -2,7 +2,7 @@ import asyncio
 import json
 import aiohttp
 from device_manager.devices.charger_bq import ChargerSettings
-from device_manager.network_controller.models.models import TestData
+from models import TestData
 from device_manager.device_manager import DeviceManager, TemperatureOf
 
 

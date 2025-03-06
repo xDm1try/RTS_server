@@ -1,5 +1,6 @@
 from machine import I2C, Pin
 import time
+from micropython import const
 
 VBUS_TYPE = ['NONE',
              'SDP',
@@ -18,11 +19,80 @@ CHRG_STAT = ['Not Charging',
 PG_STAT = ['Not Power Good',
            'Power Good']
 
-regs = [None for _ in range(21)]
+
+class ChargerSettings:
+    def __init__(self,
+                 const_current_mA: int = 130,
+                 const_volt_mV: int = 4200,
+                 cut_off_current_mA: int = 20,
+                 temp_bat_limit: int = 50,
+                 ):
+        self.const_current_mA: int = const_current_mA
+        self.const_volt_mV: int = const_volt_mV
+        self.cut_off_current_mA: int = cut_off_current_mA
+        self.temp_bat_limit: int = temp_bat_limit
+
+    def __repr__(self) -> str:
+        return (
+            f"ChargerSettings:"
+            f"const_current_mA={self.const_current_mA!r}\n"
+            f"const_volt_mV={self.const_volt_mV!r}\n"
+            f"cut_off_current_mA={self.cut_off_current_mA!r}\n"
+            f"temp_bat_limit={self.temp_bat_limit!r}\n"
+        )
+
+
+class ChargerStatus:
+    def __init__(self,
+                 const_current_mA: int,
+                 const_volt_mV: int,
+                 cut_off_current_mA: int,
+                 input_type: str,
+                 charge_status: str,
+                 adc_battery_mV: int,
+                 adc_bus_mV: int,
+                 adc_current: int,
+                 batfet_mode: bool,
+                 termination_enabled: bool,
+                 precharge_current: int,
+                 low_battery_mV: int,
+                 ):
+        self.const_current_mA = const_current_mA
+        self.const_volt_mV = const_volt_mV
+        self.cut_off_current_mA = cut_off_current_mA
+        self.input_type = input_type
+        self.charge_status = charge_status
+        self.adc_battery_mV = adc_battery_mV
+        self.adc_bus_mV = adc_bus_mV
+        self.adc_current = adc_current
+        self.batfet_mode = batfet_mode
+        self.termination_enabled = termination_enabled
+        self.precharge_current = precharge_current
+        self.low_battery_mV = low_battery_mV
+
+    def __repr__(self) -> str:
+        return (
+            f"ChargerStatus:"
+            f"const_current_mA={self.const_current_mA!r}\n"
+            f"const_volt_mV={self.const_volt_mV!r}\n"
+            f"cut_off_current_mA={self.cut_off_current_mA!r}\n"
+            f"input_type={self.input_type!r}\n"
+            f"charge_status={self.charge_status!r}\n"
+            f"adc_battery_mV={self.adc_battery_mV!r}\n"
+            f"adc_bus_mV={self.adc_bus_mV!r}\n"
+            f"adc_current={self.adc_current!r}\n"
+            f"batfet_mode={self.batfet_mode!r}\n"
+            f"termination_enabled={self.termination_enabled!r}\n"
+            f"precharge_current={self.precharge_current!r}\n"
+            f"low_battery_mV={self.low_battery_mV!r})\n"
+        )
+
+# regs = [None for _ in range(21)]
 
 
 class BQ25895:
-    I2CADDR = 0x6A
+    I2CADDR = const(0x6A)
+    charge_settings = ChargerSettings()
 
     @classmethod
     def is_enabled(cls, i2c) -> bool:
@@ -35,6 +105,7 @@ class BQ25895:
         self.i2c = i2c
         self._user_handler = handler
         self.pin_intr = int_pin
+        assert BQ25895.is_enabled(), "Addr of BQ25895 not found in I2C bus"
         self.reset()
         self.pg_stat_last = self._read_byte(0x0B) & 0b00000100
         # self.pin_intr = Pin(intr_pin, mode=Pin.IN, pull=Pin.PULL_UP)
@@ -89,6 +160,8 @@ class BQ25895:
         self.set_batfet_mode(False)
         # self.set_charge_current(64)
         self.set_charging_termination(False)
+
+        self._apply_settings(BQ25895.charge_settings)
         # self.set_charge_voltage(4176)
         # self._set_bit(0x14, [1, None, None, None, None, None, None, None])
         # self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
@@ -122,6 +195,37 @@ class BQ25895:
     def power_good_stat(self) -> int:
         ret = self._read_byte(0x0B)
         return (ret & 0b00000100) >> 2
+
+    def _apply_settings(self, settings: ChargerSettings) -> None:
+        BQ25895.charge_settings = settings
+        const_current_mA: int = settings.const_current_mA
+        const_volt_mV: int = settings.const_volt_mV
+        cut_off_current_mA: int = settings.cut_off_current_mA
+
+        try:
+            self.set_charge_current(const_current_mA)
+            self.set_current_cut_off(cut_off_current_mA)
+            self.set_charge_voltage(const_volt_mV)
+        except Exception as e:
+            print("Didn't apply charge settings")
+            raise e
+
+    def get_charger_status(self) -> ChargerStatus:
+        status = ChargerStatus(
+            self.get_charge_current(),
+            self.get_charge_voltage(),
+            BQ25895.charger_settings.cut_off_current_mA,
+            self.get_input_type_str(),
+            self.get_charge_state(),
+            self.adc_battery_volt(),
+            self.adc_vbus_volt(),
+            self.adc_charge_current(),
+            self.get_batfet_mode(),
+            self.get_charging_termination(),
+            self.get_current_precharge_limit(),
+            self.get_precharge_threshold()
+        )
+        return status
 
     def power_good_stat_str(self) -> str:
         return PG_STAT[self.power_good_stat()]
@@ -275,17 +379,17 @@ class BQ25895:
         return voltage
 
 
-def handler_all_regs(bq: BQ25895):
-    print("INTERRUPTION: ", "=" * 5)
-    for i, old_val in enumerate(regs):
-        new_val = bq._read_byte(i)
-        if new_val != old_val:
-            print(f"INT: REG{hex(i)}: ", bq.get_byte_bin(old_val), " -> ", bq.get_byte_bin(new_val))
-            regs[i] = new_val
+# def handler_all_regs(bq: BQ25895):
+#     print("INTERRUPTION: ", "=" * 5)
+#     for i, old_val in enumerate(regs):
+#         new_val = bq._read_byte(i)
+#         if new_val != old_val:
+#             print(f"INT: REG{hex(i)}: ", bq.get_byte_bin(old_val), " -> ", bq.get_byte_bin(new_val))
+#             regs[i] = new_val
 
-    print("Ichg: ", bq.adc_charge_current())
-    print("Vbat: ", bq.adc_battery_volt())
-    print("=" * 10)
+#     print("Ichg: ", bq.adc_charge_current())
+#     print("Vbat: ", bq.adc_battery_volt())
+#     print("=" * 10)
 
 
 # def get_current(bq: BQ25895, sleep: int, func=None):
@@ -299,16 +403,16 @@ def handler_all_regs(bq: BQ25895):
 
 # from bqv3 import *;bq = BQ25895(sda_pin=4, scl_pin=5, intr_pin=14, not_ce_pin=12, handler=handler_all_regs)
 
-def set_current_limits(bq: BQ25895):
-    bq.set_charging_termination(False)
-    bq.set_charge_current(128)
-    bq.set_current_cut_off(64)
+# def set_current_limits(bq: BQ25895):
+#     bq.set_charging_termination(False)
+#     bq.set_charge_current(128)
+#     bq.set_current_cut_off(64)
 
 
-def test_bq(bq: BQ25895):
-    for i in range(5):
-        print("VBUS Type:", bq.vbus_type_str())
-        print("Charge Status:", bq.chrg_stat_str())
-        print("Battery Voltage (mV):", bq.adc_battery_volt())
-        print("Charge Current (mA):", bq.adc_charge_current())
-        time.sleep(1)
+# def test_bq(bq: BQ25895):
+#     for i in range(5):
+#         print("VBUS Type:", bq.vbus_type_str())
+#         print("Charge Status:", bq.chrg_stat_str())
+#         print("Battery Voltage (mV):", bq.adc_battery_volt())
+#         print("Charge Current (mA):", bq.adc_charge_current())
+#         time.sleep(1)
