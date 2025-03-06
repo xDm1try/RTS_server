@@ -1,5 +1,5 @@
+import gc
 from machine import I2C, Pin
-import time
 from micropython import const
 
 VBUS_TYPE = ['NONE',
@@ -416,3 +416,4 @@ class BQ25895:
 #         print("Battery Voltage (mV):", bq.adc_battery_volt())
 #         print("Charge Current (mA):", bq.adc_charge_current())
 #         time.sleep(1)
+gc.collect()

@@ -14,6 +14,7 @@ Example usage on ESP8266:
     os.listdir('/')
 """
 
+import gc
 from micropython import const
 import time
 
@@ -291,3 +292,6 @@ class SDCard:
             return self.sectors
         if op == 5:  # get block size in bytes
             return 512
+
+
+gc.collect()

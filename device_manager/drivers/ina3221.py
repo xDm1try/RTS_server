@@ -46,6 +46,7 @@ Tested with Micropython v1.17 (2021-09-02) on ESP32 DevKitC:
 """
 
 # imports
+import gc
 from micropython import const
 
 __version__ = "0.0.0-auto.0"
@@ -334,14 +335,13 @@ class INA3221:
         assert 1 <= channel <= 3, "channel argument must be 1, 2, or 3"
         value = self._to_unsigned(round(voltage * C_SHUNT_ADC_LSB) * 8)
         self.write(C_REG_WARNING_ALERT_LIMIT_CH[channel], value)
-        
+
     def get_battery_mV(self) -> int:
         self.bus_voltage(self.battery_channel) * 1000
 
     def get_battery_mA(self) -> int:
         self.current(self.battery_channel) * 1000
-        
-        
+
     def get_load_mV(self) -> int:
         self.bus_voltage(self.load_channel) * 1000
 
@@ -353,3 +353,6 @@ class INA3221:
         """Returns the CVRF (ConVersion Ready Flag) from the mask/enable register """
         regvalue = self.read(C_REG_MASK_ENABLE)
         return (regvalue & C_CONV_READY_FLAG) != 0
+
+
+gc.collect()

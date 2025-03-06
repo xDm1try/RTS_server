@@ -1,3 +1,4 @@
+import gc
 import asyncio
 from machine import Pin
 from onewire import OneWire
@@ -28,3 +29,6 @@ class TemperatureSensors:
             except Exception:
                 raise Exception(f"Didn't read from temperature sensor: {addr}")
         return d
+
+
+gc.collect()

@@ -1,4 +1,4 @@
-from device_manager.devices.charger_bq import ChargerStatus
+from device_manager.drivers.bq25895 import ChargerStatus
 
 
 class HeartBeatResponse:

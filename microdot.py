@@ -1215,6 +1215,7 @@ class Microdot:
             self.server = await asyncio.start_server(serve, host, port)
 
         while True:
+            await asyncio.sleep(0.1)
             try:
                 if hasattr(self.server, 'serve_forever'):  # pragma: no cover
                     try:

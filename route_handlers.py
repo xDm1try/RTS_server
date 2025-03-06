@@ -1,9 +1,37 @@
-import asyncio
-import json
-import aiohttp
-from device_manager.devices.charger_bq import ChargerSettings
-from models import TestData
 from device_manager.device_manager import DeviceManager, TemperatureOf
+from models import TestData
+from device_manager.drivers.bq25895 import ChargerSettings
+import asyncio
+import aiohttp
+from device_manager.device_manager import DeviceManager
+import machine
+import json
+
+
+async def heartbeat_handler(device_manager: DeviceManager, requset):
+    resp = await device_manager.get_status()
+    resp = json.dumps(resp)
+    return resp
+
+
+async def reset_handler(device_manager: DeviceManager, request):
+    device_manager.reset_all()
+
+
+async def reboot_handler(device_manager, request):
+    machine.reset()
+
+
+async def send_heartbeat_response_loop(device_manager: DeviceManager):
+    data = device_manager.settings
+    while True:
+        resp = await device_manager.get_status()
+        resp = json.dumps(resp)
+        async with aiohttp.ClientSession() as session:
+            async with session.put(f'http://{data.server_ip}:{data.server_port}/device_announce',
+                                   json=resp) as response:
+                print("Status:", response.status)
+        await asyncio.sleep(5)
 
 
 async def stop_sensor_handler(device_manager, request):
@@ -57,3 +85,18 @@ async def parameters_validation(test_data: TestData, device_manager: DeviceManag
     assert settings.const_current_mA < test_data.bat_current, "The current has reached the cut-off current"
     assert settings.const_volt_mV < test_data.bat_voltage * 1.15, "The voltage exceeds by 15 percent of entered"
     assert test_data.temp_bat < settings.temp_bat_limit, f"Battery overheating ({test_data.temp_bat})"
+
+
+async def set_load_duty_handler(device_manager: DeviceManager, request):
+    data = request.json
+    new_duty = data.get("new_duty")
+    device_manager.set_load_duty(new_duty)
+
+
+async def stop_charge_handler(device_manager: DeviceManager, request):
+    device_manager.stop_charging()
+
+
+async def start_charger_handler(device_manager: DeviceManager, request):
+    data: ChargerSettings = request.json
+    device_manager.start_charging(data)

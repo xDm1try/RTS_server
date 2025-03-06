@@ -1,3 +1,4 @@
+import gc
 from machine import Pin, PWM
 
 
@@ -24,3 +25,6 @@ class L298N_short:
         if new_duty <= 0:
             return
         self.set_duty(new_duty)
+
+
+gc.collect()

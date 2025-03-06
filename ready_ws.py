@@ -37,7 +37,7 @@ gc.collect()
 
 
 async def main():
-    await asyncio.create_task(app.start_server("0.0.0.0", 21216))
+    asyncio.create_task(app.start_server("0.0.0.0", 21216))
     while True:
         gc.collect()
         print(gc.mem_free())
