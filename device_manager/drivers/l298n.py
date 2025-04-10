@@ -11,7 +11,7 @@ class L298N_short:
 
     def set_duty(self, percentage) -> None:
         assert 0 <= percentage <= 100, f"PWM duty have to be in range [0..100]. Not {percentage}"
-        self.pwm.duty(percentage)
+        self.pwm.duty(1023 * percentage // 100)
         self.duty = percentage
 
     def increase_current(self) -> None:
@@ -26,5 +26,7 @@ class L298N_short:
             return
         self.set_duty(new_duty)
 
+    def get_duty(self) -> int:
+        return self.duty
 
 gc.collect()

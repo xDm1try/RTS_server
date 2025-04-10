@@ -25,7 +25,7 @@ class TestData:
         bat_voltage,
         bat_current,
         load_duty,
-        charge_status
+        charge_status,
     ):
         self.temp_bat = temp_bat
         self.temp_env = temp_env

@@ -92,7 +92,6 @@ class ChargerStatus:
 
 class BQ25895:
     I2CADDR = const(0x6A)
-    charge_settings = ChargerSettings()
 
     @classmethod
     def is_enabled(cls, i2c) -> bool:
@@ -105,7 +104,7 @@ class BQ25895:
         self.i2c = i2c
         self._user_handler = handler
         self.pin_intr = int_pin
-        assert BQ25895.is_enabled(), "Addr of BQ25895 not found in I2C bus"
+        assert BQ25895.is_enabled(self.i2c), "Addr of BQ25895 not found in I2C bus"
         self.reset()
         self.pg_stat_last = self._read_byte(0x0B) & 0b00000100
         # self.pin_intr = Pin(intr_pin, mode=Pin.IN, pull=Pin.PULL_UP)
@@ -161,7 +160,7 @@ class BQ25895:
         # self.set_charge_current(64)
         self.set_charging_termination(False)
 
-        self._apply_settings(BQ25895.charge_settings)
+        self._apply_settings(ChargerSettings())
         # self.set_charge_voltage(4176)
         # self._set_bit(0x14, [1, None, None, None, None, None, None, None])
         # self._set_bit(0x02, [None, 1, None, None, None, None, None, None])
@@ -197,7 +196,7 @@ class BQ25895:
         return (ret & 0b00000100) >> 2
 
     def _apply_settings(self, settings: ChargerSettings) -> None:
-        BQ25895.charge_settings = settings
+        self.charge_settings = settings
         const_current_mA: int = settings.const_current_mA
         const_volt_mV: int = settings.const_volt_mV
         cut_off_current_mA: int = settings.cut_off_current_mA
@@ -210,11 +209,15 @@ class BQ25895:
             print("Didn't apply charge settings")
             raise e
 
+    def start_charging(self, settings: ChargerSettings) -> None:
+        self._apply_settings(settings)
+        self.set_charge_enable(True)
+
     def get_charger_status(self) -> ChargerStatus:
         status = ChargerStatus(
             self.get_charge_current(),
             self.get_charge_voltage(),
-            BQ25895.charger_settings.cut_off_current_mA,
+            self.charge_settings.cut_off_current_mA,
             self.get_input_type_str(),
             self.get_charge_state(),
             self.adc_battery_volt(),
@@ -283,7 +286,7 @@ class BQ25895:
         return 3000 if mode else 2800
 
     def set_current_cut_off(self, m_A) -> None:
-        assert 64 <= m_A <= 1024, f"Cut off current must be in range [64, 1024] mA ({m_A})"
+        assert 0 <= m_A <= 1024, f"Cut off current must be in range [64, 1024] mA ({m_A})"
         m_A -= m_A % 64
 
         reg_val = m_A - 64

@@ -1,10 +1,3 @@
-"""
-microdot
---------
-
-The ``microdot`` module defines a few classes that help implement HTTP-based
-servers for MicroPython and standard Python.
-"""
 import asyncio
 import io
 import json
@@ -16,10 +9,7 @@ try:
     from functools import partial
 
     async def invoke_handler(handler, *args, **kwargs):
-        """Invoke a handler and return the result.
 
-        This method runs sync handlers in a thread pool executor.
-        """
         if iscoroutinefunction(handler):
             ret = await handler(*args, **kwargs)
         else:
@@ -31,11 +21,7 @@ except ImportError:  # pragma: no cover
         return hasattr(coro, 'send') and hasattr(coro, 'throw')
 
     async def invoke_handler(handler, *args, **kwargs):
-        """Invoke a handler and return the result.
 
-        This method runs sync handlers in the asyncio thread, which can
-        potentially cause blocking and performance issues.
-        """
         ret = handler(*args, **kwargs)
         if iscoroutine(ret):
             ret = await ret
@@ -82,25 +68,7 @@ def urlencode(s):
 
 
 class NoCaseDict(dict):
-    """A subclass of dictionary that holds case-insensitive keys.
 
-    :param initial_dict: an initial dictionary of key/value pairs to
-                         initialize this object with.
-
-    Example::
-
-        >>> d = NoCaseDict()
-        >>> d['Content-Type'] = 'text/html'
-        >>> print(d['Content-Type'])
-        text/html
-        >>> print(d['content-type'])
-        text/html
-        >>> print(d['CONTENT-TYPE'])
-        text/html
-        >>> del d['cOnTeNt-TyPe']
-        >>> print(d)
-        {}
-    """
     def __init__(self, initial_dict=None):
         super().__init__(initial_dict or {})
         self.keymap = {k.lower(): k for k in self.keys() if k.lower() != k}
@@ -134,16 +102,7 @@ class NoCaseDict(dict):
 
 
 def mro(cls):  # pragma: no cover
-    """Return the method resolution order of a class.
 
-    This is a helper function that returns the method resolution order of a
-    class. It is used by Microdot to find the best error handler to invoke for
-    the raised exception.
-
-    In CPython, this function returns the ``__mro__`` attribute of the class.
-    In MicroPython, this function implements a recursive depth-first scanning
-    of the class hierarchy.
-    """
     if hasattr(cls, 'mro'):
         return cls.__mro__
 
@@ -155,9 +114,6 @@ def mro(cls):  # pragma: no cover
 
     mro_list = _mro(cls)
 
-    # If a class appears multiple times (due to multiple inheritance) remove
-    # all but the last occurence. This matches the method resolution order
-    # of MicroPython, but not CPython.
     mro_pruned = []
     for i in range(len(mro_list)):
         base = mro_list.pop(0)
@@ -167,23 +123,7 @@ def mro(cls):  # pragma: no cover
 
 
 class MultiDict(dict):
-    """A subclass of dictionary that can hold multiple values for the same
-    key. It is used to hold key/value pairs decoded from query strings and
-    form submissions.
 
-    :param initial_dict: an initial dictionary of key/value pairs to
-                         initialize this object with.
-
-    Example::
-
-        >>> d = MultiDict()
-        >>> d['sort'] = 'name'
-        >>> d['sort'] = 'email'
-        >>> print(d['sort'])
-        'name'
-        >>> print(d.getlist('sort'))
-        ['name', 'email']
-    """
     def __init__(self, initial_dict=None):
         super().__init__()
         if initial_dict:
@@ -199,26 +139,7 @@ class MultiDict(dict):
         return super().__getitem__(key)[0]
 
     def get(self, key, default=None, type=None):
-        """Return the value for a given key.
 
-        :param key: The key to retrieve.
-        :param default: A default value to use if the key does not exist.
-        :param type: A type conversion callable to apply to the value.
-
-        If the multidict contains more than one value for the requested key,
-        this method returns the first value only.
-
-        Example::
-
-            >>> d = MultiDict()
-            >>> d['age'] = '42'
-            >>> d.get('age')
-            '42'
-            >>> d.get('age', type=int)
-            42
-            >>> d.get('name', default='noname')
-            'noname'
-        """
         if key not in self:
             return default
         value = self[key]
@@ -227,28 +148,7 @@ class MultiDict(dict):
         return value
 
     def getlist(self, key, type=None):
-        """Return all the values for a given key.
 
-        :param key: The key to retrieve.
-        :param type: A type conversion callable to apply to the values.
-
-        If the requested key does not exist in the dictionary, this method
-        returns an empty list.
-
-        Example::
-
-            >>> d = MultiDict()
-            >>> d.getlist('items')
-            []
-            >>> d['items'] = '3'
-            >>> d.getlist('items')
-            ['3']
-            >>> d['items'] = '56'
-            >>> d.getlist('items')
-            ['3', '56']
-            >>> d.getlist('items', type=int)
-            [3, 56]
-        """
         if key not in self:
             return []
         values = super().__getitem__(key)
@@ -258,7 +158,7 @@ class MultiDict(dict):
 
 
 class AsyncBytesIO:
-    """An async wrapper for BytesIO."""
+
     def __init__(self, data):
         self.stream = io.BytesIO(data)
 
@@ -282,34 +182,11 @@ class AsyncBytesIO:
 
 
 class Request:
-    """An HTTP request."""
-    #: Specify the maximum payload size that is accepted. Requests with larger
-    #: payloads will be rejected with a 413 status code. Applications can
-    #: change this maximum as necessary.
-    #:
-    #: Example::
-    #:
-    #:    Request.max_content_length = 1 * 1024 * 1024  # 1MB requests allowed
+
     max_content_length = 16 * 1024
 
-    #: Specify the maximum payload size that can be stored in ``body``.
-    #: Requests with payloads that are larger than this size and up to
-    #: ``max_content_length`` bytes will be accepted, but the application will
-    #: only be able to access the body of the request by reading from
-    #: ``stream``. Set to 0 if you always access the body as a stream.
-    #:
-    #: Example::
-    #:
-    #:    Request.max_body_length = 4 * 1024  # up to 4KB bodies read
     max_body_length = 16 * 1024
 
-    #: Specify the maximum length allowed for a line in the request. Requests
-    #: with longer lines will not be correctly interpreted. Applications can
-    #: change this maximum as necessary.
-    #:
-    #: Example::
-    #:
-    #:    Request.max_readline = 16 * 1024  # 16KB lines allowed
     max_readline = 2 * 1024
 
     class G:
@@ -375,18 +252,6 @@ class Request:
 
     @staticmethod
     async def create(app, client_reader, client_writer, client_addr):
-        """Create a request object.
-
-        :param app: The Microdot application instance.
-        :param client_reader: An input stream from where the request data can
-                              be read.
-        :param client_writer: An output stream where the response data can be
-                              written.
-        :param client_addr: The address of the client, as a tuple.
-
-        This method is a coroutine. It returns a newly created ``Request``
-        object.
-        """
         # request line
         line = (await Request._safe_readline(client_reader)).strip().decode()
         if not line:  # pragma: no cover
@@ -463,9 +328,7 @@ class Request:
 
     @property
     def form(self):
-        """The parsed form submission body, as a
-        :class:`MultiDict <microdot.MultiDict>` object, or ``None`` if the
-        request does not have a form submission."""
+
         if self._form is None:
             if self.content_type is None:
                 return None
@@ -476,27 +339,6 @@ class Request:
         return self._form
 
     def after_request(self, f):
-        """Register a request-specific function to run after the request is
-        handled. Request-specific after request handlers run at the very end,
-        after the application's own after request handlers. The function must
-        take two arguments, the request and response objects. The return value
-        of the function must be the updated response object.
-
-        Example::
-
-            @app.route('/')
-            def index(request):
-                # register a request-specific after request handler
-                @req.after_request
-                def func(request, response):
-                    # ...
-                    return response
-
-                return 'Hello, World!'
-
-        Note that the function is not called if the request handler raises an
-        exception and an error response is returned instead.
-        """
         self.after_request_handlers.append(f)
         return f
 
@@ -509,20 +351,7 @@ class Request:
 
 
 class Response:
-    """An HTTP response class.
 
-    :param body: The body of the response. If a dictionary or list is given,
-                 a JSON formatter is used to generate the body. If a file-like
-                 object or an async generator is given, a streaming response is
-                 used. If a string is given, it is encoded from UTF-8. Else,
-                 the body should be a byte sequence.
-    :param status_code: The numeric HTTP status code of the response. The
-                        default is 200.
-    :param headers: A dictionary of headers to include in the response.
-    :param reason: A custom reason phrase to add after the status code. The
-                   default is "OK" for responses with a 200 status code and
-                   "N/A" for any other status codes.
-    """
     types_map = {
         'css': 'text/css',
         'gif': 'image/gif',
@@ -568,19 +397,7 @@ class Response:
     def set_cookie(self, cookie, value, path=None, domain=None, expires=None,
                    max_age=None, secure=False, http_only=False,
                    partitioned=False):
-        """Add a cookie to the response.
 
-        :param cookie: The cookie's name.
-        :param value: The cookie's value.
-        :param path: The cookie's path.
-        :param domain: The cookie's domain.
-        :param expires: The cookie expiration time, as a ``datetime`` object
-                        or a correctly formatted string.
-        :param max_age: The cookie's ``Max-Age`` value.
-        :param secure: The cookie's ``secure`` flag.
-        :param http_only: The cookie's ``HttpOnly`` flag.
-        :param partitioned: Whether the cookie is partitioned.
-        """
         http_cookie = '{cookie}={value}'.format(cookie=cookie, value=value)
         if path:
             http_cookie += '; Path=' + path
@@ -606,12 +423,6 @@ class Response:
             self.headers['Set-Cookie'] = [http_cookie]
 
     def delete_cookie(self, cookie, **kwargs):
-        """Delete a cookie.
-
-        :param cookie: The cookie's name.
-        :param kwargs: Any cookie opens and flags supported by
-                       ``set_cookie()`` except ``expires`` and ``max_age``.
-        """
         self.set_cookie(cookie, '', expires='Thu, 01 Jan 1970 00:00:01 GMT',
                         max_age=0, **kwargs)
 
@@ -736,37 +547,7 @@ class Response:
     def send_file(cls, filename, status_code=200, content_type=None,
                   stream=None, max_age=None, compressed=False,
                   file_extension=''):
-        """Send file contents in a response.
 
-        :param filename: The filename of the file.
-        :param status_code: The 3xx status code to use for the redirect. The
-                            default is 302.
-        :param content_type: The ``Content-Type`` header to use in the
-                             response. If omitted, it is generated
-                             automatically from the file extension of the
-                             ``filename`` parameter.
-        :param stream: A file-like object to read the file contents from. If
-                       a stream is given, the ``filename`` parameter is only
-                       used when generating the ``Content-Type`` header.
-        :param max_age: The ``Cache-Control`` header's ``max-age`` value in
-                        seconds. If omitted, the value of the
-                        :attr:`Response.default_send_file_max_age` attribute is
-                        used.
-        :param compressed: Whether the file is compressed. If ``True``, the
-                           ``Content-Encoding`` header is set to ``gzip``. A
-                           string with the header value can also be passed.
-                           Note that when using this option the file must have
-                           been compressed beforehand. This option only sets
-                           the header.
-        :param file_extension: A file extension to append to the ``filename``
-                               parameter when opening the file, including the
-                               dot. The extension given here is not considered
-                               when generating the ``Content-Type`` header.
-
-        Security note: The filename is assumed to be trusted. Never pass
-        filenames provided by the user without validating and sanitizing them
-        first.
-        """
         if content_type is None:
             if compressed and filename.endswith('.gz'):
                 ext = filename[:-3].split('.')[-1]
@@ -871,19 +652,6 @@ class HTTPException(Exception):
 
 
 class Microdot:
-    """An HTTP application class.
-
-    This class implements an HTTP application instance and is heavily
-    influenced by the ``Flask`` class of the Flask framework. It is typically
-    declared near the start of the main application script.
-
-    Example::
-
-        from microdot import Microdot
-
-        app = Microdot()
-    """
-
     def __init__(self):
         self.url_map = []
         self.before_request_handlers = []
@@ -896,35 +664,6 @@ class Microdot:
         self.server = None
 
     def route(self, url_pattern, methods=None):
-        """Decorator that is used to register a function as a request handler
-        for a given URL.
-
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-        :param methods: The list of HTTP methods to be handled by the
-                        decorated function. If omitted, only ``GET`` requests
-                        are handled.
-
-        The URL pattern can be a static path (for example, ``/users`` or
-        ``/api/invoices/search``) or a path with dynamic components enclosed
-        in ``<`` and ``>`` (for example, ``/users/<id>`` or
-        ``/invoices/<number>/products``). Dynamic path components can also
-        include a type prefix, separated from the name with a colon (for
-        example, ``/users/<int:id>``). The type can be ``string`` (the
-        default), ``int``, ``path`` or ``re:[regular-expression]``.
-
-        The first argument of the decorated function must be
-        the request object. Any path arguments that are specified in the URL
-        pattern are passed as keyword arguments. The return value of the
-        function must be a :class:`Response` instance, or the arguments to
-        be passed to this class.
-
-        Example::
-
-            @app.route('/')
-            def index(request):
-                return 'Hello, world!'
-        """
         def decorated(f):
             self.url_map.append(
                 ([m.upper() for m in (methods or ['GET'])],
@@ -933,179 +672,49 @@ class Microdot:
         return decorated
 
     def get(self, url_pattern):
-        """Decorator that is used to register a function as a ``GET`` request
-        handler for a given URL.
 
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-
-        This decorator can be used as an alias to the ``route`` decorator with
-        ``methods=['GET']``.
-
-        Example::
-
-            @app.get('/users/<int:id>')
-            def get_user(request, id):
-                # ...
-        """
         return self.route(url_pattern, methods=['GET'])
 
     def post(self, url_pattern):
-        """Decorator that is used to register a function as a ``POST`` request
-        handler for a given URL.
 
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-
-        This decorator can be used as an alias to the``route`` decorator with
-        ``methods=['POST']``.
-
-        Example::
-
-            @app.post('/users')
-            def create_user(request):
-                # ...
-        """
         return self.route(url_pattern, methods=['POST'])
 
     def put(self, url_pattern):
-        """Decorator that is used to register a function as a ``PUT`` request
-        handler for a given URL.
 
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-
-        This decorator can be used as an alias to the ``route`` decorator with
-        ``methods=['PUT']``.
-
-        Example::
-
-            @app.put('/users/<int:id>')
-            def edit_user(request, id):
-                # ...
-        """
         return self.route(url_pattern, methods=['PUT'])
 
     def patch(self, url_pattern):
-        """Decorator that is used to register a function as a ``PATCH`` request
-        handler for a given URL.
 
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-
-        This decorator can be used as an alias to the ``route`` decorator with
-        ``methods=['PATCH']``.
-
-        Example::
-
-            @app.patch('/users/<int:id>')
-            def edit_user(request, id):
-                # ...
-        """
         return self.route(url_pattern, methods=['PATCH'])
 
     def delete(self, url_pattern):
-        """Decorator that is used to register a function as a ``DELETE``
-        request handler for a given URL.
 
-        :param url_pattern: The URL pattern that will be compared against
-                            incoming requests.
-
-        This decorator can be used as an alias to the ``route`` decorator with
-        ``methods=['DELETE']``.
-
-        Example::
-
-            @app.delete('/users/<int:id>')
-            def delete_user(request, id):
-                # ...
-        """
         return self.route(url_pattern, methods=['DELETE'])
 
     def before_request(self, f):
-        """Decorator to register a function to run before each request is
-        handled. The decorated function must take a single argument, the
-        request object.
 
-        Example::
-
-            @app.before_request
-            def func(request):
-                # ...
-        """
         self.before_request_handlers.append(f)
         return f
 
     def after_request(self, f):
-        """Decorator to register a function to run after each request is
-        handled. The decorated function must take two arguments, the request
-        and response objects. The return value of the function must be an
-        updated response object.
 
-        Example::
-
-            @app.after_request
-            def func(request, response):
-                # ...
-                return response
-        """
         self.after_request_handlers.append(f)
         return f
 
     def after_error_request(self, f):
-        """Decorator to register a function to run after an error response is
-        generated. The decorated function must take two arguments, the request
-        and response objects. The return value of the function must be an
-        updated response object. The handler is invoked for error responses
-        generated by Microdot, as well as those returned by application-defined
-        error handlers.
 
-        Example::
-
-            @app.after_error_request
-            def func(request, response):
-                # ...
-                return response
-        """
         self.after_error_request_handlers.append(f)
         return f
 
     def errorhandler(self, status_code_or_exception_class):
-        """Decorator to register a function as an error handler. Error handler
-        functions for numeric HTTP status codes must accept a single argument,
-        the request object. Error handler functions for Python exceptions
-        must accept two arguments, the request object and the exception
-        object.
 
-        :param status_code_or_exception_class: The numeric HTTP status code or
-                                               Python exception class to
-                                               handle.
-
-        Examples::
-
-            @app.errorhandler(404)
-            def not_found(request):
-                return 'Not found'
-
-            @app.errorhandler(RuntimeError)
-            def runtime_error(request, exception):
-                return 'Runtime error'
-        """
         def decorated(f):
             self.error_handlers[status_code_or_exception_class] = f
             return f
         return decorated
 
     def mount(self, subapp, url_prefix='', local=False):
-        """Mount a sub-application, optionally under the given URL prefix.
 
-        :param subapp: The sub-application to mount.
-        :param url_prefix: The URL prefix to mount the application under.
-        :param local: When set to ``True``, the before, after and error request
-                      handlers only apply to endpoints defined in the
-                      sub-application. When ``False``, they apply to the entire
-                      application. The default is ``False``.
-        """
         for methods, pattern, handler, _prefix, _subapp in subapp.url_map:
             self.url_map.append(
                 (methods, URLPattern(url_prefix + pattern.url_pattern),
@@ -1126,65 +735,12 @@ class Microdot:
 
     @staticmethod
     def abort(status_code, reason=None):
-        """Abort the current request and return an error response with the
-        given status code.
 
-        :param status_code: The numeric status code of the response.
-        :param reason: The reason for the response, which is included in the
-                       response body.
-
-        Example::
-
-            from microdot import abort
-
-            @app.route('/users/<int:id>')
-            def get_user(id):
-                user = get_user_by_id(id)
-                if user is None:
-                    abort(404)
-                return user.to_dict()
-        """
         raise HTTPException(status_code, reason)
 
     async def start_server(self, host='0.0.0.0', port=5000, debug=False,
                            ssl=None):
-        """Start the Microdot web server as a coroutine. This coroutine does
-        not normally return, as the server enters an endless listening loop.
-        The :func:`shutdown` function provides a method for terminating the
-        server gracefully.
 
-        :param host: The hostname or IP address of the network interface that
-                     will be listening for requests. A value of ``'0.0.0.0'``
-                     (the default) indicates that the server should listen for
-                     requests on all the available interfaces, and a value of
-                     ``127.0.0.1`` indicates that the server should listen
-                     for requests only on the internal networking interface of
-                     the host.
-        :param port: The port number to listen for requests. The default is
-                     port 5000.
-        :param debug: If ``True``, the server logs debugging information. The
-                      default is ``False``.
-        :param ssl: An ``SSLContext`` instance or ``None`` if the server should
-                    not use TLS. The default is ``None``.
-
-        This method is a coroutine.
-
-        Example::
-
-            import asyncio
-            from microdot import Microdot
-
-            app = Microdot()
-
-            @app.route('/')
-            async def index(request):
-                return 'Hello, world!'
-
-            async def main():
-                await app.start_server(debug=True)
-
-            asyncio.run(main())
-        """
         self.debug = debug
 
         async def serve(reader, writer):
@@ -1230,52 +786,12 @@ class Microdot:
                 await asyncio.sleep(0.1)
 
     def run(self, host='0.0.0.0', port=5000, debug=False, ssl=None):
-        """Start the web server. This function does not normally return, as
-        the server enters an endless listening loop. The :func:`shutdown`
-        function provides a method for terminating the server gracefully.
 
-        :param host: The hostname or IP address of the network interface that
-                     will be listening for requests. A value of ``'0.0.0.0'``
-                     (the default) indicates that the server should listen for
-                     requests on all the available interfaces, and a value of
-                     ``127.0.0.1`` indicates that the server should listen
-                     for requests only on the internal networking interface of
-                     the host.
-        :param port: The port number to listen for requests. The default is
-                     port 5000.
-        :param debug: If ``True``, the server logs debugging information. The
-                      default is ``False``.
-        :param ssl: An ``SSLContext`` instance or ``None`` if the server should
-                    not use TLS. The default is ``None``.
-
-        Example::
-
-            from microdot import Microdot
-
-            app = Microdot()
-
-            @app.route('/')
-            async def index(request):
-                return 'Hello, world!'
-
-            app.run(debug=True)
-        """
         asyncio.run(self.start_server(host=host, port=port, debug=debug,
                                       ssl=ssl))  # pragma: no cover
 
     def shutdown(self):
-        """Request a server shutdown. The server will then exit its request
-        listening loop and the :func:`run` function will return. This function
-        can be safely called from a route handler, as it only schedules the
-        server to terminate as soon as the request completes.
 
-        Example::
-
-            @app.route('/shutdown')
-            def shutdown(request):
-                request.app.shutdown()
-                return 'The server is shutting down...'
-        """
         self.server.close()
 
     def find_route(self, req):

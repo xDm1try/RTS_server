@@ -144,7 +144,7 @@ class INA3221:
     """Driver class for Texas Instruments INA3221 3 channel current sensor device"""
 
     IS_FULL_API = True
-    _DEFAULT_ADDRESS = const(0x40)
+    DEFAULT_ADDRESS = const(0x40)
 
     @staticmethod
     def _to_signed(val):
@@ -160,7 +160,7 @@ class INA3221:
 
     @classmethod
     def is_enabled(cls, i2c) -> bool:
-        return cls._DEFAULT_ADDRESS in i2c.scan()
+        return cls.DEFAULT_ADDRESS in i2c.scan()
 
     def write(self, reg, value):
         """Write value in device register"""
@@ -254,13 +254,13 @@ class INA3221:
             in_end=in_end,
         )
 
-    def __init__(self, i2c_instance, i2c_addr=_DEFAULT_ADDRESS, shunt_resistor=(0.1, 0.1, 0.1)):
+    def __init__(self, i2c_instance, i2c_addr=DEFAULT_ADDRESS, shunt_resistor=(0.1, 0.1, 0.1)):
         self.i2c_device = i2c_instance
         self.i2c_addr = i2c_addr
         self.shunt_resistor = shunt_resistor
         self.battery_channel = 1
         self.load_channel = 2
-        self.is_enabled()
+        self.is_enabled(self.i2c_device)
         self.write(C_REG_CONFIG,  C_AVERAGING_16_SAMPLES |
                    C_VBUS_CONV_TIME_1MS |
                    C_SHUNT_CONV_TIME_1MS |
@@ -276,7 +276,7 @@ class INA3221:
                     C_SHUNT_CONV_TIME_8MS |
                     C_MODE_SHUNT_AND_BUS_CONTINOUS)
 
-    def is_channel_enabled(self, channel=1):
+        def is_channel_enabled(self, channel=1):
         """Returns if a given channel is enabled or not"""
         assert 1 <= channel <= 3, "channel argument must be 1, 2, or 3"
         bit = C_ENABLE_CH[channel]
@@ -337,16 +337,16 @@ class INA3221:
         self.write(C_REG_WARNING_ALERT_LIMIT_CH[channel], value)
 
     def get_battery_mV(self) -> int:
-        self.bus_voltage(self.battery_channel) * 1000
+        return self.bus_voltage(self.battery_channel) * 1000
 
     def get_battery_mA(self) -> int:
-        self.current(self.battery_channel) * 1000
+        return self.current(self.battery_channel) * 1000
 
     def get_load_mV(self) -> int:
-        self.bus_voltage(self.load_channel) * 1000
+        return self.bus_voltage(self.load_channel) * 1000
 
     def get_load_mA(self) -> int:
-        self.current(self.load_channel) * 1000
+        return self.current(self.load_channel) * 1000
 
     @property
     def is_ready(self):

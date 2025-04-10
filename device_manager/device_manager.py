@@ -1,8 +1,11 @@
+import asyncio
+import json
+import aiohttp
 from device_manager.drivers.l298n import L298N_short
 from device_manager.drivers.bq25895 import BQ25895, ChargerSettings, ChargerStatus
 from device_manager.drivers.ina3221 import INA3221
 from device_manager.drivers.temperature_sensors import TemperatureSensors
-from models import HeartBeatResponse
+from models import HeartBeatResponse, TestData
 from machine import Pin, I2C, PWM
 from onewire import OneWire
 
@@ -61,7 +64,7 @@ class DeviceManager:
         self.dev_ip = device_ip
         self.i2c_bus = I2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
-        self.pwm = Pin(self.settings.pwm_pin)
+        self.pwm = PWM(Pin(self.settings.pwm_pin))
 
         # self.init_all_devices()
 
@@ -76,13 +79,15 @@ class DeviceManager:
         self._init_load()
 
     def _init_load(self):
-        self.load = L298N_short(self.pwm)
+        self.load = L298N_short(self.pwm, 5000)
 
     def _init_temperature_sensors(self):
-        self.temp_sensors = TemperatureSensors()
+        addr_dict = [self.settings.temp_bat_addr, self.settings.temp_env_addr, self.settings.temp_load_addr]
+        print(addr_dict)
+        self.temp_sensors = TemperatureSensors(self.onewire, addr_dict)
 
     def _init_charger(self):
-        self.charger: BQ25895 = BQ25895(self.i2c, Pin(self.settings.charger_intr))
+        self.charger: BQ25895 = BQ25895(self.i2c_bus, Pin(self.settings.charger_intr))
 
     def _init_multimeter(self):
         self.multimeter: INA3221 = INA3221(self.i2c_bus)
@@ -90,29 +95,50 @@ class DeviceManager:
     def get_device_ip(self) -> str:
         return self.dev_ip
 
-    async def get_temperatures(self) -> dict[str, float]:
-        d = await self.temp_sensors.read_temperature()
-        d[TemperatureOf.BATTERY] = d[self.settings.temp_bat_addr]
-        d[TemperatureOf.ENVIRONMENT] = d[self.settings.temp_env_addr]
-        d[TemperatureOf.LOAD] = d[self.settings.temp_load_addr]
-        return d
+    def parameters_validation(self, test_data: TestData):
+        settings: ChargerSettings = self.get_charging_settings()
+        assert settings.const_current_mA < test_data.bat_current, "The current has reached the cut-off current"
+        assert settings.const_volt_mV < test_data.bat_voltage * 1.15, "The voltage exceeds by 15 percent of entered"
+        # assert test_data.temp_bat_limit < settings.temp_bat_limit, f"Battery overheating ({test_data.temp_bat})" TODO
 
-    async def get_battery_mV(self) -> int:
+    async def collect_parameters(self):
+        voltage = self.get_battery_mV()
+        current = self.get_battery_mA()
+        duty = self.get_load_duty()
+        status = self.get_charging_status()
+        temp = self.get_temperatures()
+        response = TestData(
+            temp_bat=temp[TemperatureOf.BATTERY],
+            temp_env=temp[TemperatureOf.ENVIRONMENT],
+            temp_load=temp[TemperatureOf.LOAD],
+            bat_current=current,
+            bat_voltage=voltage,
+            load_duty=duty,
+            charge_status=status
+        )
+        try:
+            self.parameters_validation(test_data=response)
+        except AssertionError as e:
+            print(e)
+            self.reset_all()
+        return json.dumps(response)
+
+    def get_battery_mV(self) -> int:
         return self.multimeter.get_battery_mV()
 
-    async def get_battery_mA(self) -> int:
+    def get_battery_mA(self) -> int:
         return self.multimeter.get_battery_mA()
 
-    async def get_load_duty(self) -> int:
+    def get_load_duty(self) -> int:
         return self.load.get_duty()
 
-    async def set_load_duty(self, duty: int) -> None:
+    def set_load_duty(self, duty: int) -> None:
         return self.load.set_duty(duty)
 
-    async def start_charging(self, settings: ChargerSettings):
+    def start_charging(self, settings: ChargerSettings):
         self.charger.start_charging(settings)
 
-    async def stop_charging(self):
+    def stop_charging(self):
         self.charger.set_charge_enable(False)
 
     def get_charging_settings(self) -> ChargerSettings:
@@ -128,7 +154,7 @@ class DeviceManager:
         self.charger.reset()
         self.load.set_duty(0)
 
-    async def get_status(self) -> HeartBeatResponse:
+    def get_status(self) -> HeartBeatResponse:
         status = self.STATUS
         name = self.settings.device_name
         ip = self.get_device_ip()
