@@ -6,7 +6,7 @@
 #Each byte contains a column of pixels.
 #The character may be 8 pixels high and 5 wide.
 
-sysfont = {"Width": 5, "Height": 8, "Start": 0, "End": 254, "Data": bytearray([
+sysfont = {"Width": 5, "Height": 10, "Start": 0, "End": 254, "Data": bytearray([
   0x00, 0x00, 0x00, 0x00, 0x00,
   0x3E, 0x5B, 0x4F, 0x5B, 0x3E,
   0x3E, 0x6B, 0x4F, 0x6B, 0x3E,

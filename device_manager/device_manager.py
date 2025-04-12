@@ -1,12 +1,18 @@
 import asyncio
+import gc
 import json
+import time
+from machine import SPI
 import aiohttp
+import network
+from device_manager.drivers.display.display_device import DisplayDevice
 from device_manager.drivers.l298n import L298N_short
 from device_manager.drivers.bq25895 import BQ25895, ChargerSettings, ChargerStatus
 from device_manager.drivers.ina3221 import INA3221
 from device_manager.drivers.temperature_sensors import TemperatureSensors
-from models import HeartBeatResponse, TestData
-from machine import Pin, I2C, PWM
+from server.models import HeartBeatResponse, TestData
+from machine import Pin, SoftI2C, PWM
+import ntptime
 from onewire import OneWire
 
 
@@ -25,7 +31,12 @@ class DeviceSettings:
                  temp_load_addr: str,
                  temp_env_addr: str,
                  broadcast_port: int,
-                 pwm_pin: int):
+                 pwm_pin: int,
+                 display_spi: int,
+                 display_DC: int,
+                 display_RESET: int,
+                 display_CS: int
+                 ):
         self.server_ip = server_ip
         self.server_port = server_port
         self.wifi_name = wifi_name
@@ -41,6 +52,10 @@ class DeviceSettings:
         self.temp_load_addr = temp_load_addr
         self.temp_env_addr = temp_env_addr
         self.pwm_pin = pwm_pin
+        self.display_spi = display_spi
+        self.display_DC = display_DC
+        self.display_RESET = display_RESET
+        self.display_CS = display_CS
 
 
 class TemperatureOf:
@@ -58,16 +73,20 @@ class DeviceManager:
 
     STATUS = OK
 
-    def __init__(self, device_ip, settings: DeviceSettings):
+    def __init__(self, ip, settings: DeviceSettings):
         assert settings, "No settings in DeviceController"
+        self.dev_ip = ip
+        
         self.settings: DeviceSettings = settings
-        self.dev_ip = device_ip
-        self.i2c_bus = I2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
+        self.display_spi = SPI(settings.display_spi)
+
+        self.i2c_bus = SoftI2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
         self.pwm = PWM(Pin(self.settings.pwm_pin))
+        self._init_display()
 
         # self.init_all_devices()
-
+        
     def init_all_devices(self):
 
         self._init_charger()
@@ -101,13 +120,22 @@ class DeviceManager:
         assert settings.const_volt_mV < test_data.bat_voltage * 1.15, "The voltage exceeds by 15 percent of entered"
         # assert test_data.temp_bat_limit < settings.temp_bat_limit, f"Battery overheating ({test_data.temp_bat})" TODO
 
-    async def collect_parameters(self):
+    def _init_display(self):
+        self.display: DisplayDevice = DisplayDevice(
+            self.display_spi, self.settings.display_DC, self.settings.display_RESET, self.settings.display_CS)
+        
+    def _show_display(self):
+        time_tuple: tuple = ntptime.gmtime()
+        time_str: str = f"{}"
+        self.display.show()
+    
+    async def acollect_parameters(self) -> TestData:
         voltage = self.get_battery_mV()
         current = self.get_battery_mA()
         duty = self.get_load_duty()
         status = self.get_charging_status()
-        temp = self.get_temperatures()
-        response = TestData(
+        temp = self.temp_sensors.aread_temperature()
+        test_data = TestData(
             temp_bat=temp[TemperatureOf.BATTERY],
             temp_env=temp[TemperatureOf.ENVIRONMENT],
             temp_load=temp[TemperatureOf.LOAD],
@@ -116,12 +144,42 @@ class DeviceManager:
             load_duty=duty,
             charge_status=status
         )
+        return test_data
+
+    def collect_parameters(self) -> TestData:
+        voltage = self.get_battery_mV()
+        current = self.get_battery_mA()
+        duty = self.get_load_duty()
+        status = self.get_charging_status()
+        temp = self.temp_sensors.read_temperature()
+        test_data = TestData(
+            temp_bat=temp[TemperatureOf.BATTERY],
+            temp_env=temp[TemperatureOf.ENVIRONMENT],
+            temp_load=temp[TemperatureOf.LOAD],
+            bat_current=current,
+            bat_voltage=voltage,
+            load_duty=duty,
+            charge_status=status
+        )
+        return test_data
+
+    async def acollect_parameters_json(self) -> str:
+        test_data = await self.acollect_parameters()
         try:
-            self.parameters_validation(test_data=response)
+            self.parameters_validation(test_data=test_data)
         except AssertionError as e:
             print(e)
             self.reset_all()
-        return json.dumps(response)
+        return json.dumps(test_data)
+    
+    def collect_parameters_json(self) -> str:
+        test_data = self.collect_parameters()
+        try:
+            self.parameters_validation(test_data=test_data)
+        except AssertionError as e:
+            print(e)
+            self.reset_all()
+        return json.dumps(test_data)
 
     def get_battery_mV(self) -> int:
         return self.multimeter.get_battery_mV()

@@ -1,8 +1,8 @@
 """This file is executed on every boot (including wake-boot from deepsleep)"""
 
-import os
-import machine
-import asyncio
+# import os
+# import machine
+# import asyncio
 
 # import esp
 # esp.osdebug(None)
@@ -13,3 +13,4 @@ import gc
 gc.collect()
 
 # asyncio.run(main())
+print('BOOT DONE')

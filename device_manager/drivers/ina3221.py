@@ -277,10 +277,10 @@ class INA3221:
                     C_MODE_SHUNT_AND_BUS_CONTINOUS)
 
         def is_channel_enabled(self, channel=1):
-        """Returns if a given channel is enabled or not"""
-        assert 1 <= channel <= 3, "channel argument must be 1, 2, or 3"
-        bit = C_ENABLE_CH[channel]
-        return self.read(C_REG_CONFIG) & bit != 0
+            """Returns if a given channel is enabled or not"""
+            assert 1 <= channel <= 3, "channel argument must be 1, 2, or 3"
+            bit = C_ENABLE_CH[channel]
+            return self.read(C_REG_CONFIG) & bit != 0
 
     def enable_channel(self, channel=1, enable=True):
         """Enables or disable a given channel"""

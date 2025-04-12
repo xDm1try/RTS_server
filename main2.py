@@ -1,6 +1,6 @@
 import aiohttp
 from device_manager.drivers.bq25895 import ChargerSettings
-from microdot import Microdot
+from server.microdot import Microdot
 from device_manager.device_manager import DeviceManager, DeviceSettings
 import json
 from utils import garbage_collect, get_env_dict
@@ -44,8 +44,13 @@ s = DeviceSettings(
     temp_bat_addr=d.get("TEMP_BAT_ADDR"),  # yellow, blue, green
     temp_load_addr=d.get("TEMP_LOAD_ADDR"),  # whites
     temp_env_addr=d.get("TEMP_ENV_ADDR"),  # red, orange
-    pwm_pin=int(d.get("PWM_PIN"))
+    pwm_pin=int(d.get("PWM_PIN")),
+    display_spi=int(d.get("DISPLAY_SPI")),
+    display_DC=int(d.get("DISPLAY_DC")),
+    display_RESET=int(d.get("DISPLAY_RESET")),
+    display_CS=int(d.get("DISPLAY_CS")),
 )
+
 
 cfg = wlan.ipconfig('addr4')
 
@@ -102,18 +107,12 @@ async def set_load_duty(request):
 async def stop_sensors(request):
     if not DeviceManager.SENSOR_LOOP:
         DeviceManager.SENSOR_LOOP.cancel()
-        
+
+
 @garbage_collect
 @app.route("/get_sensors_data")
 async def get_sensors(request):
-    
-
-
-# @garbage_collect
-# @app.route("/start_sensors")
-# async def start_sensors(request):
-#     task = asyncio.create_task(device_manager.parameters_loop(device_manager=device_manager, request=request))
-#     DeviceManager.SENSOR_LOOP = task
+    ...
 
 
 @garbage_collect

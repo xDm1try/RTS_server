@@ -3,7 +3,7 @@ from device_manager.drivers.display.sysfont import sysfont
 from machine import SPI, Pin
 import time
 import math
-spi = SPI(2, baudrate=20000000, polarity=0, phase=0, sck=Pin(14), mosi=Pin(13), miso=Pin(12))
+spi = SPI(1)
 tft = TFT(spi, 33, 25, 15)
 tft.initr()
 tft.rgb(True)
@@ -103,12 +103,41 @@ def testroundrects():
         color += 100
 
 
+def show_test():
+    tft.fill(TFT.BLACK)
+    v = 0
+    tft.text((0, v), f"{123} {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"IP: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Charge status: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Charger input {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"mV bat: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"mA bat: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Temp bat: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Temp env: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Temp load: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Duty load: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Load mA: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+    tft.text((0, v), f"Load mV: {123}", tft.WHITE, sysfont, 1, nowrap=True)
+    v += sysfont["Height"]
+
+
 def tftprinttest():
     tft.fill(TFT.BLACK)
     v = 30
     tft.text((0, v), "Hello World!", TFT.RED, sysfont, 1, nowrap=True)
     v += sysfont["Height"]
-    tft.text((0, v), "Hello World!", TFT.YELLOW, sysfont, 2, nowrap=True)
+    tft.text((0, v), "Hello World!", TFT.YELLOW, sysfont, 1, nowrap=True)
     v += sysfont["Height"] * 2
     tft.text((0, v), "Hello World!", TFT.GREEN, sysfont, 3, nowrap=True)
     v += sysfont["Height"] * 3
@@ -137,34 +166,36 @@ def tftprinttest():
 
 def test_main():
     tft.fill(TFT.BLACK)
-    tft.text((0, 0), "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur adipiscing ante sed nibh tincidunt feugiat. Maecenas enim massa, fringilla sed malesuada et, malesuada sit amet turpis. Sed porttitor neque ut ante pretium vitae malesuada nunc bibendum. Nullam aliquet ultrices massa eu hendrerit. Ut sed nisi lorem. In vestibulum purus a tortor imperdiet posuere. ", TFT.WHITE, sysfont, 1)
-    time.sleep_ms(1000)
+    show_test()
+    # tft.text((0, 0), "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur adipiscing ante sed nibh tincidunt feugiat. Maecenas enim massa, fringilla sed malesuada et, malesuada sit amet turpis. Sed porttitor neque ut ante pretium vitae malesuada nunc bibendum. Nullam aliquet ultrices massa eu hendrerit. Ut sed nisi lorem. In vestibulum purus a tortor imperdiet posuere. ", TFT.WHITE, sysfont, 1)
+    # time.sleep_ms(1000)
 
-    tftprinttest()
-    time.sleep_ms(4000)
+    # tftprinttest()
+    # time.sleep_ms(4000)
 
-    testlines(TFT.YELLOW)
-    time.sleep_ms(500)
+    # testlines(TFT.YELLOW)
+    # time.sleep_ms(500)
 
-    testfastlines(TFT.RED, TFT.BLUE)
-    time.sleep_ms(500)
+    # testfastlines(TFT.RED, TFT.BLUE)
+    # time.sleep_ms(500)
 
-    testdrawrects(TFT.GREEN)
-    time.sleep_ms(500)
+    # testdrawrects(TFT.GREEN)
+    # time.sleep_ms(500)
 
-    testfillrects(TFT.YELLOW, TFT.PURPLE)
-    time.sleep_ms(500)
+    # testfillrects(TFT.YELLOW, TFT.PURPLE)
+    # time.sleep_ms(500)
 
-    tft.fill(TFT.BLACK)
-    testfillcircles(10, TFT.BLUE)
-    testdrawcircles(10, TFT.WHITE)
-    time.sleep_ms(500)
+    # tft.fill(TFT.BLACK)
+    # testfillcircles(10, TFT.BLUE)
+    # testdrawcircles(10, TFT.WHITE)
+    # time.sleep_ms(500)
 
-    testroundrects()
-    time.sleep_ms(500)
+    # testroundrects()
+    # time.sleep_ms(500)
 
-    testtriangles()
-    time.sleep_ms(500)
+    # testtriangles()
+    # time.sleep_ms(500)
+    # from device_manager.drivers.display.graphicstest import *
 
 
 test_main()
