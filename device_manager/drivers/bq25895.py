@@ -5,16 +5,16 @@ from micropython import const
 VBUS_TYPE = ['NONE',
              'SDP',
              'CDP (1.5A)',
-             'USB_DCP (3.25A)',
+             'DCP (3.25A)',
              'MAXC (1.5A)',
-             'UNKNOWN (500mA)',
-             'NONSTAND (1A/2A/2.1A/2.4A)',
+             'UNKNOWN',
+             'NONSTAND',
              'VBUS_OTG']
 
-CHRG_STAT = ['Not Charging',
+CHRG_STAT = ['Disabled',
              'Pre-charge',
-             'Fast Charging',
-             'Charge Termination Done']
+             'Charge',
+             'Terminated']
 
 PG_STAT = ['Not Power Good',
            'Power Good']

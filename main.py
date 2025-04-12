@@ -7,6 +7,7 @@ from utils import garbage_collect, get_env_dict
 # import machine
 import gc
 import network
+import ntptime
 # import asyncio
 import time
 print("READY")
@@ -27,6 +28,9 @@ while not wlan.isconnected():
 time.sleep(0.3)
 
 gc.collect()
+while ntptime.gmtime()[0] == 2000:
+    ntptime.settime()
+    time.sleep(0.3)
 print("DONE")
 
 d = get_env_dict()

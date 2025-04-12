@@ -17,7 +17,7 @@ class TemperatureSensors:
         for rom in roms:
             assert rom.hex() in addresses_hex, f"Not found temperature sensor: {rom.hex()}"
 
-    async def aread_temperature(self) -> dict[str, int]:
+    async def aread_temperature(self) -> dict[str, float]:
         try:
             self.temp.convert_temp()
         except Exception:
@@ -31,13 +31,13 @@ class TemperatureSensors:
                 raise Exception(f"Didn't read from temperature sensor: {addr}")
         return d
 
-    async def read_temperature(self) -> dict[str, int]:
+    def read_temperature(self) -> dict[str, float]:
         try:
             self.temp.convert_temp()
         except Exception:
             raise Exception("Didn't convert with temperature sensors")
         d = dict()
-        await time.sleep(0.75)
+        time.sleep(0.75)
         for addr in self.addresses_hex:
             try:
                 d[addr] = self.temp.read_temp(bytearray.fromhex(addr))

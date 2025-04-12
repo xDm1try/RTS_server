@@ -76,17 +76,16 @@ class DeviceManager:
     def __init__(self, ip, settings: DeviceSettings):
         assert settings, "No settings in DeviceController"
         self.dev_ip = ip
-        
+
         self.settings: DeviceSettings = settings
-        self.display_spi = SPI(settings.display_spi)
+        self.display_spi = SPI(settings.display_spi, baudrate=60000000)
 
         self.i2c_bus = SoftI2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
         self.pwm = PWM(Pin(self.settings.pwm_pin))
-        self._init_display()
 
-        # self.init_all_devices()
-        
+        self.init_all_devices()
+
     def init_all_devices(self):
 
         self._init_charger()
@@ -96,6 +95,8 @@ class DeviceManager:
         self._init_temperature_sensors()
 
         self._init_load()
+
+        self._init_display()
 
     def _init_load(self):
         self.load = L298N_short(self.pwm, 5000)
@@ -118,22 +119,41 @@ class DeviceManager:
         settings: ChargerSettings = self.get_charging_settings()
         assert settings.const_current_mA < test_data.bat_current, "The current has reached the cut-off current"
         assert settings.const_volt_mV < test_data.bat_voltage * 1.15, "The voltage exceeds by 15 percent of entered"
-        # assert test_data.temp_bat_limit < settings.temp_bat_limit, f"Battery overheating ({test_data.temp_bat})" TODO
 
     def _init_display(self):
         self.display: DisplayDevice = DisplayDevice(
             self.display_spi, self.settings.display_DC, self.settings.display_RESET, self.settings.display_CS)
-        
+        self._show_display()
+
     def _show_display(self):
         time_tuple: tuple = ntptime.gmtime()
-        time_str: str = f"{}"
-        self.display.show()
-    
+        time_str: str = f"{time_tuple[3]:02d}:{time_tuple[4]:02d}:{time_tuple[5]:02d}"
+        params = self.collect_parameters()
+        charger_input = self.charger.get_input_type_str()
+
+        self.display.show(time_value=time_str, device_name=self.settings.device_name, chg_status=params.charge_status,
+                          v_bat=params.bat_voltage, current_bat=params.bat_current, temp_bat=params.temp_bat,
+                          temp_env=params.temp_env, temp_load=params.temp_load, load_duty=params.load_duty,
+                          ip=self.dev_ip, load_voltage=params.load_voltage,
+                          load_current=params.load_current, input_status=charger_input)
+
+    async def _ashow_display(self):
+        time_tuple: tuple = ntptime.gmtime()
+        time_str: str = f"{time_tuple[3]:02d}:{time_tuple[4]:02d}:{time_tuple[5]:02d}"
+        params = await self.acollect_parameters()
+        charger_input = self.charger.get_input_type_str()
+
+        self.display.show(time_value=time_str, device_name=self.settings.device_name, chg_status=params.charge_status,
+                          v_bat=params.bat_voltage, current_bat=params.bat_current, temp_bat=params.temp_bat,
+                          temp_env=params.temp_env, temp_load=params.temp_load, load_duty=params.load_duty,
+                          ip=self.dev_ip, load_voltage=params.load_voltage,
+                          load_current=params.load_current, input_status=charger_input)
+
     async def acollect_parameters(self) -> TestData:
-        voltage = self.get_battery_mV()
-        current = self.get_battery_mA()
+        voltage = self.multimeter.get_battery_mV()
+        current = self.multimeter.get_battery_mA()
         duty = self.get_load_duty()
-        status = self.get_charging_status()
+        status: ChargerStatus = self.charger.get_charger_status()
         temp = self.temp_sensors.aread_temperature()
         test_data = TestData(
             temp_bat=temp[TemperatureOf.BATTERY],
@@ -142,24 +162,29 @@ class DeviceManager:
             bat_current=current,
             bat_voltage=voltage,
             load_duty=duty,
-            charge_status=status
+            charge_status=status.charge_status,
         )
         return test_data
 
     def collect_parameters(self) -> TestData:
-        voltage = self.get_battery_mV()
-        current = self.get_battery_mA()
+        bat_voltage = self.multimeter.get_battery_mV()
+        bat_current = self.multimeter.get_battery_mA()
         duty = self.get_load_duty()
-        status = self.get_charging_status()
+        load_current = self.multimeter.get_load_mA()
+        load_voltage = self.multimeter.get_load_mV()
+        status: ChargerStatus = self.charger.get_charger_status()
         temp = self.temp_sensors.read_temperature()
+
         test_data = TestData(
-            temp_bat=temp[TemperatureOf.BATTERY],
-            temp_env=temp[TemperatureOf.ENVIRONMENT],
-            temp_load=temp[TemperatureOf.LOAD],
-            bat_current=current,
-            bat_voltage=voltage,
+            temp_bat=temp[self.settings.temp_bat_addr],
+            temp_env=temp[self.settings.temp_env_addr],
+            temp_load=temp[self.settings.temp_load_addr],
+            bat_current=bat_current,
+            bat_voltage=bat_voltage,
             load_duty=duty,
-            charge_status=status
+            charge_status=status.charge_status,
+            load_current=load_current,
+            load_voltage=load_voltage
         )
         return test_data
 
@@ -171,7 +196,7 @@ class DeviceManager:
             print(e)
             self.reset_all()
         return json.dumps(test_data)
-    
+
     def collect_parameters_json(self) -> str:
         test_data = self.collect_parameters()
         try:
@@ -180,12 +205,6 @@ class DeviceManager:
             print(e)
             self.reset_all()
         return json.dumps(test_data)
-
-    def get_battery_mV(self) -> int:
-        return self.multimeter.get_battery_mV()
-
-    def get_battery_mA(self) -> int:
-        return self.multimeter.get_battery_mA()
 
     def get_load_duty(self) -> int:
         return self.load.get_duty()
@@ -202,9 +221,6 @@ class DeviceManager:
     def get_charging_settings(self) -> ChargerSettings:
         return BQ25895.charge_settings
 
-    def get_charging_status(self) -> ChargerStatus:
-        return self.charger.get_charger_status()
-
     def reset_charger(self) -> None:
         self.charger.reset()
 
@@ -216,7 +232,7 @@ class DeviceManager:
         status = self.STATUS
         name = self.settings.device_name
         ip = self.get_device_ip()
-        ch_status = self.get_charging_status()
+        ch_status = self.charger.get_charger_status()
 
         resp = HeartBeatResponse(device_status=status, device_name=name, device_ip=ip, charger_status=ch_status)
         return resp

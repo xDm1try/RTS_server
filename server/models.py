@@ -24,12 +24,16 @@ class TestData:
         temp_load,
         bat_voltage,
         bat_current,
+        load_voltage,
+        load_current,
         load_duty,
         charge_status,
     ):
         self.temp_bat = temp_bat
         self.temp_env = temp_env
         self.temp_load = temp_load
+        self.load_voltage = load_voltage
+        self.load_current = load_current
         self.bat_voltage = bat_voltage
         self.bat_current = bat_current
         self.load_duty = load_duty
