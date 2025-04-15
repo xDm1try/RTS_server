@@ -161,8 +161,10 @@ class DeviceManager:
         bat_current = self.multimeter.get_battery_mA()
         load_current = self.multimeter.get_load_mA()
         load_voltage = self.multimeter.get_load_mV()
-        cc = self.charger.get_charge_current()
-        cv = self.charger.get_charge_voltage()
+        cc = self.charger.get_charge_current() if "Pre-" not in self.charger.get_charge_state() \
+            else self.charger.get_current_precharge_limit()
+        cv = self.charger.get_charge_voltage() if "Pre-" not in self.charger.get_charge_state() \
+            else self.charger.get_precharge_threshold()
         duty = self.get_load_duty()
         status: ChargerStatus = self.charger.get_charger_status()
         temp = await self.temp_sensors.aread_temperature()
