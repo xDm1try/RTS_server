@@ -17,13 +17,11 @@ class L298N_short:
     def increase_current(self) -> None:
         if self.duty == 100:
             return
-        new_duty = self.duty + 1
+        new_duty = 100 if self.duty + 5 > 100 else self.duty + 5
         self.set_duty(new_duty)
 
     def decrease_current(self) -> None:
-        new_duty = self.duty - 1
-        if new_duty <= 0:
-            return
+        new_duty = 0 if self.duty - 5 <= 0 else self.duty - 5
         self.set_duty(new_duty)
 
     def get_duty(self) -> int:

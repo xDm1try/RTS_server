@@ -71,7 +71,10 @@ class TemperatureOf:
 
 class DeviceManager:
     SENSOR_LOOP = None
-    SENSOR_LOOP_STARTED = asyncio.ThreadSafeFlag()
+    SENSOR_LOOP_STARTED = asyncio.Event()
+    CURRENT_HOLDER_STARTED = asyncio.Event()
+    HELD_CURRENT = None
+    FILE_NAME = "test_data.txt"
 
     BUSY = "device is busy"
     ERROR = "error happend"
@@ -87,11 +90,12 @@ class DeviceManager:
 
         self.settings: DeviceSettings = settings
         self.display_spi = SPI(settings.display_spi, baudrate=60000000)
+        
         self.SD_PATH = "/sd"
         print(gc.mem_free())
-        # sd = SDCard(SPI(settings.sdcard_SPI), Pin(settings.sdcard_CS))
-        # os.mount(sd, self.SD_PATH)
-        # assert "sd" in os.listdir("/"), "No sdcard mounted directory"
+        sd = SDCard(SPI(settings.sdcard_SPI), Pin(settings.sdcard_CS))
+        os.mount(sd, self.SD_PATH)
+        assert "sd" in os.listdir("/"), "No sdcard mounted directory"
 
         self.i2c_bus = SoftI2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
@@ -191,17 +195,16 @@ class DeviceManager:
 
     async def a_write_fs_loop(self):
         while True:
-            self.SENSOR_LOOP_STARTED.wait()
+            await self.SENSOR_LOOP_STARTED.wait()
 
-            while self.SENSOR_LOOP_STARTED:
+            while self.SENSOR_LOOP_STARTED.is_set():
                 params = await self.a_get_collected_parameters()
                 string = str(params) + "\n"
-                with open("/sd/test_data.txt", "w") as f:
+                with open(f"{self.SD_PATH}/{self.FILE_NAME}", "a") as f:
                     f.write(string)
                     f.flush()
-
+                    print(string)
                 gc.collect()
-                await asyncio.sleep(1)
 
     async def a_set_collected_parameters(self) -> TestData:
         async with self.PARAMETERS_LOCK:
@@ -211,6 +214,18 @@ class DeviceManager:
         async with self.PARAMETERS_LOCK:
             params = self.__PARAMETERS
         return params
+    
+    async def a_hold_current_loop(self):
+        while True:
+            await self.CURRENT_HOLDER_STARTED.wait()
+            self.set_load_duty(50)
+            while self.CURRENT_HOLDER_STARTED.is_set():
+                params = await self.a_get_collected_parameters()
+                current = params.bat_current
+                if current < self.HELD_CURRENT:
+                    self.load.increase_current()
+                else:
+                    self.load.decrease_current()
 
     def collect_parameters(self) -> TestData:
         bat_voltage = self.multimeter.get_battery_mV()

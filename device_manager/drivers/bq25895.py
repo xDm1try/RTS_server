@@ -247,7 +247,13 @@ class BQ25895:
 
     def set_charge_current(self, m_A) -> None:
         assert 64 <= m_A <= 5056, f"Charge current range is [64, 5056] mA. ({m_A})"
-        m_A -= m_A % 64
+
+        offset = m_A % 64
+        if offset <= 31:
+            m_A -= offset
+        else:
+            m_A += offset
+
         reg_val = int(m_A / 64)
         self._set_bit(0x04, [
             None,
@@ -362,7 +368,11 @@ class BQ25895:
         assert 3840 <= voltage <= 4608, "Charge voltage must be in range [3840, 4608]"
         voltage_additional = voltage - 3840
         reg_val = int(voltage_additional / 16)
-        voltage -= voltage % 16
+        offset = voltage % 16
+        if offset <= 7:
+            voltage -= offset
+        else:
+            voltage += offset
 
         self._set_bit(0x06, [
             1 if reg_val & 0b00100000 else 0,

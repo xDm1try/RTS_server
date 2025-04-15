@@ -1,11 +1,7 @@
 import gc
-from  network import WLAN ,STA_IF
-# from  ntptime import gmtime, settime
 from time import sleep
-# import aiohttp
-gc.collect()
-
-
+from network import WLAN, STA_IF
+# from  ntptime import gmtime, settime
 print("STARTED")
 print(gc.mem_free())
 wlan = WLAN(STA_IF)
@@ -21,22 +17,25 @@ gc.collect()
 #     sleep(0.3)
 gc.collect()
 cfg = wlan.ipconfig('addr4')
-print(cfg)   
+print(cfg)
 sleep(0.3)
 print("DONE")
-
-import asyncio
-
-import json
-from device_manager.device_manager import DeviceManager, DeviceSettings
-from device_manager.drivers.bq25895 import ChargerSettings
 from server.microdot import Microdot
+from device_manager.drivers.bq25895 import ChargerSettings
+from device_manager.device_manager import DeviceManager, DeviceSettings
+import json
+import asyncio
+# import aiohttp
+gc.collect()
+
+
 
 def garbage_collect(func):
     def decorator():
         func()
         gc.collect()
     return decorator
+
 
 def get_env_dict(device_settings_file: str = "/core/device_settings.env") -> dict:
     new_dict = dict()
@@ -48,6 +47,7 @@ def get_env_dict(device_settings_file: str = "/core/device_settings.env") -> dic
             new_dict[name.strip()] = value.strip()
 
     return new_dict
+
 
 d = get_env_dict()
 
@@ -129,17 +129,17 @@ async def set_load_duty(request):
 
 
 @garbage_collect
-@app.route("/stop_sensors")
-async def stop_sensors(request):
-    if DeviceManager.SENSOR_LOOP is not None:
-        DeviceManager.SENSOR_LOOP_TEMINATED.set()
+@app.route("/start_writing")
+async def start_sensors(request):
+    data = request.json
+    DeviceManager.FILE_NAME = str(data.get("sd_file_name"))
+    DeviceManager.SENSOR_LOOP_STARTED.set()
+
 
 @garbage_collect
-@app.route("/start_sensors")
-async def start_sensors(request):
-    if DeviceManager.SENSOR_LOOP is None:
-        DeviceManager.SENSOR_LOOP_TEMINATED.clear()
-        DeviceManager.SENSOR_LOOP = asyncio.create_task(d.a_write_fs_loop())
+@app.route("/stop_writing")
+async def stop_sensors(request):
+    DeviceManager.SENSOR_LOOP_STARTED.clear()
 
 
 @garbage_collect
@@ -162,10 +162,13 @@ async def reset_rout(request):
     d.reset_all()
 
 # import asyncio;asyncio.run(main())
+
+
 async def main():
     asyncio.create_task(app.start_server("0.0.0.0", 21216))
     asyncio.create_task(d.a_collect_data_loop())
     asyncio.create_task(d.a_show_parameters())
+    asyncio.create_task(d.a_write_fs_loop())
     while True:
         gc.collect()
         print(gc.mem_free())
