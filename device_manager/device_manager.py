@@ -1,19 +1,20 @@
 import asyncio
 import gc
-import json
-import time
-from machine import SPI
-import aiohttp
-import network
+import os
 from device_manager.drivers.display.display_device import DisplayDevice
 from device_manager.drivers.l298n import L298N_short
 from device_manager.drivers.bq25895 import BQ25895, ChargerSettings, ChargerStatus
 from device_manager.drivers.ina3221 import INA3221
+from device_manager.drivers.sdcard import SDCard
 from device_manager.drivers.temperature_sensors import TemperatureSensors
+# import os
+# from device_manager.drivers.sdcard import SDCard
 from server.models import HeartBeatResponse, TestData
-from machine import Pin, SoftI2C, PWM
-import ntptime
+from ntptime import gmtime
+from machine import Pin, SoftI2C, PWM, SPI
 from onewire import OneWire
+from json import dumps
+import time
 
 
 class DeviceSettings:
@@ -35,7 +36,9 @@ class DeviceSettings:
                  display_spi: int,
                  display_DC: int,
                  display_RESET: int,
-                 display_CS: int
+                 display_CS: int,
+                 sdcard_SPI: int,
+                 sdcard_CS: int
                  ):
         self.server_ip = server_ip
         self.server_port = server_port
@@ -56,6 +59,8 @@ class DeviceSettings:
         self.display_DC = display_DC
         self.display_RESET = display_RESET
         self.display_CS = display_CS
+        self.sdcard_SPI = sdcard_SPI
+        self.sdcard_CS = sdcard_CS
 
 
 class TemperatureOf:
@@ -66,6 +71,7 @@ class TemperatureOf:
 
 class DeviceManager:
     SENSOR_LOOP = None
+    SENSOR_LOOP_STARTED = asyncio.ThreadSafeFlag()
 
     BUSY = "device is busy"
     ERROR = "error happend"
@@ -73,12 +79,19 @@ class DeviceManager:
 
     STATUS = OK
 
+    PARAMETERS_LOCK = asyncio.Lock()
+
     def __init__(self, ip, settings: DeviceSettings):
         assert settings, "No settings in DeviceController"
         self.dev_ip = ip
 
         self.settings: DeviceSettings = settings
         self.display_spi = SPI(settings.display_spi, baudrate=60000000)
+        self.SD_PATH = "/sd"
+        print(gc.mem_free())
+        # sd = SDCard(SPI(settings.sdcard_SPI), Pin(settings.sdcard_CS))
+        # os.mount(sd, self.SD_PATH)
+        # assert "sd" in os.listdir("/"), "No sdcard mounted directory"
 
         self.i2c_bus = SoftI2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
         self.onewire = OneWire(Pin(settings.temp_pin))
@@ -125,46 +138,79 @@ class DeviceManager:
             self.display_spi, self.settings.display_DC, self.settings.display_RESET, self.settings.display_CS)
         self._show_display()
 
-    def _show_display(self):
-        time_tuple: tuple = ntptime.gmtime()
+    def _show_display(self, parameters: TestData | None = None):
+        time_tuple: tuple = gmtime()
         time_str: str = f"{time_tuple[3]:02d}:{time_tuple[4]:02d}:{time_tuple[5]:02d}"
-        params = self.collect_parameters()
+        params = parameters if parameters is not None else self.collect_parameters()
         charger_input = self.charger.get_input_type_str()
 
         self.display.show(time_value=time_str, device_name=self.settings.device_name, chg_status=params.charge_status,
                           v_bat=params.bat_voltage, current_bat=params.bat_current, temp_bat=params.temp_bat,
                           temp_env=params.temp_env, temp_load=params.temp_load, load_duty=params.load_duty,
                           ip=self.dev_ip, load_voltage=params.load_voltage,
-                          load_current=params.load_current, input_status=charger_input)
-
-    async def _ashow_display(self):
-        time_tuple: tuple = ntptime.gmtime()
-        time_str: str = f"{time_tuple[3]:02d}:{time_tuple[4]:02d}:{time_tuple[5]:02d}"
-        params = await self.acollect_parameters()
-        charger_input = self.charger.get_input_type_str()
-
-        self.display.show(time_value=time_str, device_name=self.settings.device_name, chg_status=params.charge_status,
-                          v_bat=params.bat_voltage, current_bat=params.bat_current, temp_bat=params.temp_bat,
-                          temp_env=params.temp_env, temp_load=params.temp_load, load_duty=params.load_duty,
-                          ip=self.dev_ip, load_voltage=params.load_voltage,
-                          load_current=params.load_current, input_status=charger_input)
+                          load_current=params.load_current, input_status=charger_input,
+                          const_current=params.const_current, const_volt=params.const_voltage)
 
     async def acollect_parameters(self) -> TestData:
-        voltage = self.multimeter.get_battery_mV()
-        current = self.multimeter.get_battery_mA()
+        await asyncio.sleep(1)
+        bat_voltage = self.multimeter.get_battery_mV()
+        bat_current = self.multimeter.get_battery_mA()
+        load_current = self.multimeter.get_load_mA()
+        load_voltage = self.multimeter.get_load_mV()
+        cc = self.charger.get_charge_current()
+        cv = self.charger.get_charge_voltage()
         duty = self.get_load_duty()
         status: ChargerStatus = self.charger.get_charger_status()
-        temp = self.temp_sensors.aread_temperature()
+        temp = await self.temp_sensors.aread_temperature()
+        time_data = time.time()
         test_data = TestData(
-            temp_bat=temp[TemperatureOf.BATTERY],
-            temp_env=temp[TemperatureOf.ENVIRONMENT],
-            temp_load=temp[TemperatureOf.LOAD],
-            bat_current=current,
-            bat_voltage=voltage,
+            temp_bat=temp[self.settings.temp_bat_addr],
+            temp_env=temp[self.settings.temp_env_addr],
+            temp_load=temp[self.settings.temp_load_addr],
+            bat_current=bat_current,
+            bat_voltage=bat_voltage,
             load_duty=duty,
             charge_status=status.charge_status,
-        )
+            load_current=load_current,
+            load_voltage=load_voltage,
+            const_current=cc,
+            const_voltage=cv,
+            time=time_data)
         return test_data
+
+    async def a_collect_data_loop(self) -> None:
+        while True:
+            await self.a_set_collected_parameters()
+            gc.collect()
+
+    async def a_show_parameters(self) -> None:
+        while True:
+            params = await self.a_get_collected_parameters()
+            self._show_display(parameters=params)
+            await asyncio.sleep(5)
+
+    async def a_write_fs_loop(self):
+        while True:
+            self.SENSOR_LOOP_STARTED.wait()
+
+            while self.SENSOR_LOOP_STARTED:
+                params = await self.a_get_collected_parameters()
+                string = str(params) + "\n"
+                with open("/sd/test_data.txt", "w") as f:
+                    f.write(string)
+                    f.flush()
+
+                gc.collect()
+                await asyncio.sleep(1)
+
+    async def a_set_collected_parameters(self) -> TestData:
+        async with self.PARAMETERS_LOCK:
+            self.__PARAMETERS = await self.acollect_parameters()
+
+    async def a_get_collected_parameters(self) -> TestData:
+        async with self.PARAMETERS_LOCK:
+            params = self.__PARAMETERS
+        return params
 
     def collect_parameters(self) -> TestData:
         bat_voltage = self.multimeter.get_battery_mV()
@@ -172,8 +218,11 @@ class DeviceManager:
         duty = self.get_load_duty()
         load_current = self.multimeter.get_load_mA()
         load_voltage = self.multimeter.get_load_mV()
+        cc = self.charger.get_charge_current()
+        cv = self.charger.get_charge_voltage()
         status: ChargerStatus = self.charger.get_charger_status()
         temp = self.temp_sensors.read_temperature()
+        time_data = time.time()
 
         test_data = TestData(
             temp_bat=temp[self.settings.temp_bat_addr],
@@ -184,7 +233,10 @@ class DeviceManager:
             load_duty=duty,
             charge_status=status.charge_status,
             load_current=load_current,
-            load_voltage=load_voltage
+            load_voltage=load_voltage,
+            const_current=cc,
+            const_voltage=cv,
+            time=time_data
         )
         return test_data
 
@@ -195,7 +247,7 @@ class DeviceManager:
         except AssertionError as e:
             print(e)
             self.reset_all()
-        return json.dumps(test_data)
+        return dumps(test_data)
 
     def collect_parameters_json(self) -> str:
         test_data = self.collect_parameters()
@@ -204,7 +256,7 @@ class DeviceManager:
         except AssertionError as e:
             print(e)
             self.reset_all()
-        return json.dumps(test_data)
+        return dumps(test_data)
 
     def get_load_duty(self) -> int:
         return self.load.get_duty()

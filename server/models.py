@@ -28,6 +28,9 @@ class TestData:
         load_current,
         load_duty,
         charge_status,
+        const_current,
+        const_voltage,
+        time
     ):
         self.temp_bat = temp_bat
         self.temp_env = temp_env
@@ -38,6 +41,26 @@ class TestData:
         self.bat_current = bat_current
         self.load_duty = load_duty
         self.charge_status = charge_status
+        self.const_current = const_current
+        self.const_voltage = const_voltage
+        self.time = time
+        
+    def __str__(self):
+        # Формируем строку с параметрами в порядке их объявления
+        return (
+            f"temp_bat={self.temp_bat} "
+            f"temp_env={self.temp_env} "
+            f"temp_load={self.temp_load} "
+            f"bat_voltage={self.bat_voltage} "
+            f"bat_current={self.bat_current} "
+            f"load_voltage={self.load_voltage} "
+            f"load_current={self.load_current} "
+            f"load_duty={self.load_duty} "
+            f"charge_status={self.charge_status} "
+            f"const_current={self.const_current} "
+            f"const_voltage={self.const_voltage} "
+            f"time={self.time}"
+        )
 
 
 class SetDuty:

@@ -1,33 +1,53 @@
-import aiohttp
-from device_manager.drivers.bq25895 import ChargerSettings
-from server.microdot import Microdot
-from device_manager.device_manager import DeviceManager, DeviceSettings
-import json
-from utils import garbage_collect, get_env_dict
-import machine
 import gc
-import network
-import asyncio
-import time
+from  network import WLAN ,STA_IF
+from  ntptime import gmtime, settime
+from time import sleep
+# import aiohttp
 gc.collect()
-time.sleep(3)
-gc.collect()
+
+
+print("STARTED")
 print(gc.mem_free())
-wlan = network.WLAN(network.STA_IF)
+wlan = WLAN(STA_IF)
 wlan.active(True)
-wlan.connect("POCOF3", "22222222")
+wlan.connect("MDV", "QAZwsxedc")
 while not wlan.isconnected():
     print('Connecting to WIFI')
-    time.sleep(0.3)
-time.sleep(0.3)
+    sleep(0.3)
 
 gc.collect()
-gc.collect()
-gc.collect()
+while gmtime()[0] == 2000:
+    settime()
+    sleep(0.3)
+gc.collect()    
+sleep(0.3)
+print("DONE")
 
+import asyncio
+
+import json
+from device_manager.device_manager import DeviceManager, DeviceSettings
+from server.microdot import Microdot
+from device_manager.drivers.bq25895 import ChargerSettings
+
+def garbage_collect(func):
+    def decorator():
+        func()
+        gc.collect()
+    return decorator
+
+def get_env_dict(device_settings_file: str = "/core/device_settings.env") -> dict:
+    new_dict = dict()
+    with open(device_settings_file, "r") as f:
+        lines = f.readlines()
+        lines = list(map(lambda line: line.strip(), lines))
+        items: list[(str, str)] = list(map(lambda line: line.split("="), lines))
+        for name, value in items:
+            new_dict[name.strip()] = value.strip()
+
+    return new_dict
 
 d = get_env_dict()
-
 
 s = DeviceSettings(
     server_ip=d.get("SERVER_IP"),
@@ -49,29 +69,28 @@ s = DeviceSettings(
     display_DC=int(d.get("DISPLAY_DC")),
     display_RESET=int(d.get("DISPLAY_RESET")),
     display_CS=int(d.get("DISPLAY_CS")),
+    sdcard_SPI=int(d.get("SDCARD_SPI")),
+    sdcard_CS=int(d.get("SDCARD_CS"))
 )
 
-
 cfg = wlan.ipconfig('addr4')
-
+gc.collect()
 print(gc.mem_free())
 print(cfg)
-
-device_manager = DeviceManager(cfg[0], s)
+d = DeviceManager(cfg[0], s)
 
 app = Microdot()
 
-
-async def send_heartbeat_response_loop(device_manager: DeviceManager):
-    data = device_manager.settings
-    while True:
-        resp = await device_manager.get_status()
-        resp = json.dumps(resp)
-        async with aiohttp.ClientSession() as session:
-            async with session.put(f'http://{data.server_ip}:{data.server_port}/device_announce',
-                                   json=resp) as response:
-                print("Status:", response.status)
-        await asyncio.sleep(5)
+# async def send_heartbeat_response_loop(d: DeviceManager):
+#     data = d.settings
+#     while True:
+#         resp = await d.get_status()
+#         resp = json.dumps(resp)
+#         async with aiohttp.ClientSession() as session:
+#             async with session.put(f'http://{data.server_ip}:{data.server_port}/device_announce',
+#                                    json=resp) as response:
+#                 print("Status:", response.status)
+#         await asyncio.sleep(5)
 
 
 @garbage_collect
@@ -84,14 +103,14 @@ async def health(request):
 @garbage_collect
 @app.route("/stop_charge")
 async def stop_charge(request):
-    device_manager.stop_charging()
+    d.stop_charging()
 
 
 @garbage_collect
 @app.route("/start_charge")
 async def start_charge(request):
     data: ChargerSettings = request.json
-    device_manager.start_charging(data)
+    d.start_charging(data)
 
 
 @garbage_collect
@@ -99,7 +118,7 @@ async def start_charge(request):
 async def set_load_duty(request):
     data = request.json
     new_duty = data.get("new_duty")
-    device_manager.set_load_duty(new_duty)
+    d.set_load_duty(new_duty)
 
 
 @garbage_collect
@@ -118,7 +137,7 @@ async def get_sensors(request):
 @garbage_collect
 @app.route('/heartbeat')
 async def heartbeat_route(request):
-    resp = await device_manager.get_status()
+    resp = await d.get_status()
     resp = json.dumps(resp)
     return resp
 
@@ -126,19 +145,31 @@ async def heartbeat_route(request):
 @garbage_collect
 @app.route("/reset")
 async def reset_rout(request):
-    device_manager.reset_all()
+    d.reset_all()
 
-
-@garbage_collect
-@app.route('/reboot')
-async def reboot_route(request):
-    machine.reset()
-    gc.collect()
-
-
+# import asyncio;asyncio.run(main())
 async def main():
-    await asyncio.create_task(app.start_server("0.0.0.0", 21216))
+    asyncio.create_task(app.start_server("0.0.0.0", 21216))
+    # asyncio.create_task(d.a_collect_data_loop())
+    # asyncio.create_task(d.a_show_parameters())
     while True:
         gc.collect()
         print(gc.mem_free())
         await asyncio.sleep(2)
+
+
+# # Создание TCP-сокета
+# server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# server_socket.bind(('0.0.0.0', 1234))  # Слушаем на всех интерфейсах, порт 1234
+# server_socket.listen(1)  # Максимум 1 подключение в очереди
+# print("Waiting for connection...")
+# conn, addr = server_socket.accept()
+# print("Client connected from:", addr)
+# while True:
+#     data = conn.recv(1024)  # Получаем данные (максимум 1024 байта)
+#     if not data:
+#         break
+#     print("Received:", data.decode())
+#     conn.sendall(b"Message received")  # Отправляем ответ
+# conn.close()
+# server_socket.close()
