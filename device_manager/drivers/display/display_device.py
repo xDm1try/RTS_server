@@ -18,22 +18,22 @@ class DisplayDevice:
         self.tft.rgb(True)
         self.tft.fill(TFT.BLACK)
 
-    def show(self, time_value: str, chg_status: str, v_bat: int, current_bat: int, input_status: str, temp_env: float,
-             temp_bat: float, temp_load: float, load_current: float, load_voltage: float,
-             load_duty: int, ip: str, device_name: str, const_current: int, const_volt: int):
+    def show(self, time_value: str, device_status: str, chg_status: str, v_bat: int, current_bat: int, input_status: str,
+             temp_env: float, temp_bat: float, temp_load: float, load_current: float, load_voltage: float,
+             load_duty: int, ip: str, device_name: str, const_current: int, const_volt: int, writing_file: str,
+             free_mem: int):
         self.tft.fill(TFT.BLACK)
         v = 0
         self.tft.text((0, v), f"{device_name} {time_value}", self.tft.WHITE, sysfont, 1, nowrap=True)
         v += sysfont["Height"]
         self.tft.text((0, v), f"IP: {ip}", self.tft.WHITE, sysfont, 1, nowrap=True)
         v += sysfont["Height"]
-        self.tft.text((0, v), f"Charging: {chg_status}",
+        self.tft.text((0, v), f"Device: {device_status}", self.tft.WHITE, sysfont, 1, nowrap=True)
+        v += sysfont["Height"]
+        self.tft.text((0, v), f"Charger: {chg_status}",
                       self.tft.WHITE, sysfont, 1, nowrap=True)
         v += sysfont["Height"]
-        self.tft.text((0, v), f"CC: {const_current}",
-                      self.tft.WHITE, sysfont, 1, nowrap=True)
-        v += sysfont["Height"]
-        self.tft.text((0, v), f"CV: {const_volt}",
+        self.tft.text((0, v), f"CC: {const_current} | CV: {const_volt}",
                       self.tft.WHITE, sysfont, 1, nowrap=True)
         v += sysfont["Height"]
         self.tft.text((0, v), f"BQ bus: {input_status}",
@@ -55,3 +55,13 @@ class DisplayDevice:
         v += sysfont["Height"]
         self.tft.text((0, v), f"Load mV: {load_voltage}", self.tft.WHITE, sysfont, 1, nowrap=True)
         v += sysfont["Height"]
+        self.tft.text((0, v), f"SD free GB: {str(free_mem)}", self.tft.WHITE, sysfont, 1, nowrap=True)
+        v += sysfont["Height"]
+        self.tft.text((0, v), f"SD.file:{writing_file}", self.tft.WHITE, sysfont, 1, nowrap=True)
+        v += sysfont["Height"]
+
+    def write(self, msg: str):
+        v = 0
+        for line in msg.split("\n"):
+            self.tft.text((0, v), line, self.tft.WHITE, sysfont, 1, nowrap=True)
+            v += sysfont["Height"]

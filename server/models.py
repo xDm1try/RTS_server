@@ -1,12 +1,10 @@
-from device_manager.drivers.bq25895 import ChargerStatus
 
-
-class HeartBeatResponse:
-    def __init__(self, device_status: str, device_name: str, device_ip: str, charger_status: ChargerStatus):
+class DeviceAnnounce:
+    def __init__(self, device_status: str, device_name: str, device_ip: str, sd_free_mem: int):
         self.device_status = device_status
         self.device_name = device_name
-        self.device_ip = device_ip,
-        self.charger_status = charger_status
+        self.device_ip = device_ip
+        self.sd_free_mem = sd_free_mem
 
 
 class StartSensors:
@@ -44,7 +42,7 @@ class TestData:
         self.const_current = const_current
         self.const_voltage = const_voltage
         self.time = time
-        
+
     def __str__(self):
         # Формируем строку с параметрами в порядке их объявления
         return (
@@ -63,11 +61,26 @@ class TestData:
         )
 
 
-class SetDuty:
-    def __init__(self, new_duty):
-        self.new_duty = new_duty
+class DischargeSettings:
+    def __init__(self, dicharge_voltage_limit: int = 2750, current: int = 0,
+                 start_duty: int = 0, temp_bat_limit: int = 50):
+        self.discharge_current = current
+        self.start_duty = start_duty
+        self.dicharge_voltage_limit = dicharge_voltage_limit
+        self.temp_bat_limit = temp_bat_limit
 
 
 class StartCharge:
     def __init__(self, charge_settings):
         self.charge_settings = charge_settings
+
+
+class WriteSettings:
+    def __init__(self, sd_file_name: str = "test_data.txt", timeout: float = 1):
+        self.sd_file_name = sd_file_name
+        self.timeout = timeout
+
+
+class StartSending:
+    def __init__(self, db_url):
+        self.db_url = db_url

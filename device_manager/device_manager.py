@@ -1,15 +1,17 @@
 import asyncio
 import gc
 import os
+import aiohttp
 from device_manager.drivers.display.display_device import DisplayDevice
 from device_manager.drivers.l298n import L298N_short
 from device_manager.drivers.bq25895 import BQ25895, ChargerSettings, ChargerStatus
 from device_manager.drivers.ina3221 import INA3221
 from device_manager.drivers.sdcard import SDCard
 from device_manager.drivers.temperature_sensors import TemperatureSensors
+
 # import os
 # from device_manager.drivers.sdcard import SDCard
-from server.models import HeartBeatResponse, TestData
+from server.models import TestData, DischargeSettings, WriteSettings
 from ntptime import gmtime
 from machine import Pin, SoftI2C, PWM, SPI
 from onewire import OneWire
@@ -22,6 +24,7 @@ class DeviceSettings:
     def __init__(self,
                  server_ip: str,
                  server_port: int,
+                 announce_route: str,
                  wifi_name: str,
                  wifi_passw: str,
                  device_name: str,
@@ -38,10 +41,11 @@ class DeviceSettings:
                  display_RESET: int,
                  display_CS: int,
                  sdcard_SPI: int,
-                 sdcard_CS: int
+                 sdcard_CS: int,
                  ):
         self.server_ip = server_ip
         self.server_port = server_port
+        self.announce_route = announce_route
         self.wifi_name = wifi_name
         self.wifi_passw = wifi_passw
         self.device_name = device_name
@@ -63,57 +67,68 @@ class DeviceSettings:
         self.sdcard_CS = sdcard_CS
 
 
-class TemperatureOf:
-    BATTERY = "BAT"
-    LOAD = "LOAD"
-    ENVIRONMENT = "ENV"
+class CurrentActions:
+    NOTHING = "NOTHING"
+    CHARGING = "CHARGING"
+    DISCHARGING = "DISCHARGING"
 
 
 class DeviceManager:
-    SENSOR_LOOP = None
-    SENSOR_LOOP_STARTED = asyncio.Event()
-    CURRENT_HOLDER_STARTED = asyncio.Event()
-    HELD_CURRENT = None
-    FILE_NAME = "test_data.txt"
+    WRITE_LOOP_STARTED = asyncio.Event()
+    VALIDATE_LOOP_STARTED = asyncio.Event()
 
-    BUSY = "device is busy"
-    ERROR = "error happend"
-    OK = "ok"
+    DISCHARGE_CURRENT_SETTINGS = DischargeSettings()
 
-    STATUS = OK
+    CURRENT_ACTION = CurrentActions.NOTHING
+    WRITE_SETTINGS = WriteSettings()
+
+    EVENT_FIRST_TEST_DATA_APPEARED = asyncio.Event()
 
     PARAMETERS_LOCK = asyncio.Lock()
 
     def __init__(self, ip, settings: DeviceSettings):
         assert settings, "No settings in DeviceController"
+        DeviceManager.EVENT_FIRST_TEST_DATA_APPEARED.clear()
         self.dev_ip = ip
 
         self.settings: DeviceSettings = settings
         self.display_spi = SPI(settings.display_spi, baudrate=60000000)
-        
-        self.SD_PATH = "/sd"
-        print(gc.mem_free())
-        sd = SDCard(SPI(settings.sdcard_SPI), Pin(settings.sdcard_CS))
-        os.mount(sd, self.SD_PATH)
-        assert "sd" in os.listdir("/"), "No sdcard mounted directory"
-
-        self.i2c_bus = SoftI2C(scl=Pin(settings.i2c_scl), sda=Pin(settings.i2c_sda), freq=400000)
-        self.onewire = OneWire(Pin(settings.temp_pin))
-        self.pwm = PWM(Pin(self.settings.pwm_pin))
-
+        self.display: DisplayDevice = DisplayDevice(
+            self.display_spi, self.settings.display_DC, self.settings.display_RESET, self.settings.display_CS)
         self.init_all_devices()
+        print("all_inited")
+        time.sleep(1)
 
     def init_all_devices(self):
+        try:
+            self.SD_PATH = "/sd"
+            print(gc.mem_free())
+            sd = SDCard(SPI(self.settings.sdcard_SPI), Pin(self.settings.sdcard_CS))
+            os.mount(sd, self.SD_PATH)
+            assert "sd" in os.listdir("/"), "No sdcard mounted directory"
 
-        self._init_charger()
+            self.i2c_bus = SoftI2C(scl=Pin(self.settings.i2c_scl), sda=Pin(self.settings.i2c_sda), freq=400000)
+            self.onewire = OneWire(Pin(self.settings.temp_pin))
+            self.pwm = PWM(Pin(self.settings.pwm_pin))
 
-        self._init_multimeter()
+            self._init_charger()
+            print("_init_charger")
 
-        self._init_temperature_sensors()
+            self._init_multimeter()
+            print("_init_multimeter")
 
-        self._init_load()
+            self._init_temperature_sensors()
+            print("_init_temperature_sensors")
 
-        self._init_display()
+            self._init_load()
+            print("_init_load")
+            self._init_display()
+            print("_init_display")
+
+        except Exception as e:
+            e_str = str(e)
+            self.display.write(e_str)
+            raise e
 
     def _init_load(self):
         self.load = L298N_short(self.pwm, 5000)
@@ -132,39 +147,46 @@ class DeviceManager:
     def get_device_ip(self) -> str:
         return self.dev_ip
 
-    def parameters_validation(self, test_data: TestData):
-        settings: ChargerSettings = self.get_charging_settings()
-        assert settings.const_current_mA < test_data.bat_current, "The current has reached the cut-off current"
-        assert settings.const_volt_mV < test_data.bat_voltage * 1.15, "The voltage exceeds by 15 percent of entered"
-
     def _init_display(self):
-        self.display: DisplayDevice = DisplayDevice(
-            self.display_spi, self.settings.display_DC, self.settings.display_RESET, self.settings.display_CS)
         self._show_display()
+
+    def get_free_sd_mem(self):
+        data = os.statvfs(self.SD_PATH)
+        gb = (data[0] * data[3]) // 1024 // 1024 // 1024
+        return gb
 
     def _show_display(self, parameters: TestData | None = None):
         time_tuple: tuple = gmtime()
         time_str: str = f"{time_tuple[3]:02d}:{time_tuple[4]:02d}:{time_tuple[5]:02d}"
         params = parameters if parameters is not None else self.collect_parameters()
         charger_input = self.charger.get_input_type_str()
-
-        self.display.show(time_value=time_str, device_name=self.settings.device_name, chg_status=params.charge_status,
+        writing_file = DeviceManager.WRITE_SETTINGS.sd_file_name \
+            if DeviceManager.WRITE_LOOP_STARTED.is_set() else ""
+        free_sd_gb = self.get_free_sd_mem()
+        self.display.show(time_value=time_str, device_name=self.settings.device_name,
+                          device_status=DeviceManager.CURRENT_ACTION, chg_status=params.charge_status,
                           v_bat=params.bat_voltage, current_bat=params.bat_current, temp_bat=params.temp_bat,
                           temp_env=params.temp_env, temp_load=params.temp_load, load_duty=params.load_duty,
                           ip=self.dev_ip, load_voltage=params.load_voltage,
                           load_current=params.load_current, input_status=charger_input,
-                          const_current=params.const_current, const_volt=params.const_voltage)
+                          const_current=params.const_current, const_volt=params.const_voltage,
+                          writing_file=writing_file,
+                          free_mem=free_sd_gb)
 
     async def acollect_parameters(self) -> TestData:
-        await asyncio.sleep(1)
+        # await asyncio.sleep(0)
         bat_voltage = self.multimeter.get_battery_mV()
         bat_current = self.multimeter.get_battery_mA()
         load_current = self.multimeter.get_load_mA()
         load_voltage = self.multimeter.get_load_mV()
-        cc = self.charger.get_charge_current() if "Pre-" not in self.charger.get_charge_state() \
-            else self.charger.get_current_precharge_limit()
-        cv = self.charger.get_charge_voltage() if "Pre-" not in self.charger.get_charge_state() \
-            else self.charger.get_precharge_threshold()
+        if "Disable" in self.charger.get_charge_state():
+            cc = 0
+            cv = 0
+        else:
+            cc = self.charger.get_charge_current() if "Pre-" not in self.charger.get_charge_state() \
+                else self.charger.get_current_precharge_limit()
+            cv = self.charger.get_charge_voltage() if "Pre-" not in self.charger.get_charge_state() \
+                else self.charger.get_precharge_threshold()
         duty = self.get_load_duty()
         status: ChargerStatus = self.charger.get_charger_status()
         temp = await self.temp_sensors.aread_temperature()
@@ -197,37 +219,69 @@ class DeviceManager:
 
     async def a_write_fs_loop(self):
         while True:
-            await self.SENSOR_LOOP_STARTED.wait()
+            DeviceManager.WRITE_SETTINGS = WriteSettings()
+            await DeviceManager.WRITE_LOOP_STARTED.wait()
 
-            while self.SENSOR_LOOP_STARTED.is_set():
+            print("file ", f"{self.SD_PATH}/{DeviceManager.WRITE_SETTINGS.sd_file_name}")
+            while DeviceManager.WRITE_LOOP_STARTED.is_set():
                 params = await self.a_get_collected_parameters()
                 string = str(params) + "\n"
-                with open(f"{self.SD_PATH}/{self.FILE_NAME}", "a") as f:
+                with open(f"{self.SD_PATH}/{DeviceManager.WRITE_SETTINGS.sd_file_name}", "a") as f:
                     f.write(string)
                     f.flush()
                     print(string)
                 gc.collect()
+                await asyncio.sleep(DeviceManager.WRITE_SETTINGS.timeout)
 
-    async def a_set_collected_parameters(self) -> TestData:
-        async with self.PARAMETERS_LOCK:
-            self.__PARAMETERS = await self.acollect_parameters()
+    async def a_set_collected_parameters(self) -> None:
+        # async with self.PARAMETERS_LOCK:
+        self.__PARAMETERS = await self.acollect_parameters()
+        self.a_hold_current(self.__PARAMETERS)
+        if not self.EVENT_FIRST_TEST_DATA_APPEARED.is_set():
+            self.EVENT_FIRST_TEST_DATA_APPEARED.set()
 
     async def a_get_collected_parameters(self) -> TestData:
-        async with self.PARAMETERS_LOCK:
-            params = self.__PARAMETERS
+        # async with self.PARAMETERS_LOCK:
+        await self.EVENT_FIRST_TEST_DATA_APPEARED.wait()
+        params = self.__PARAMETERS
         return params
-    
-    async def a_hold_current_loop(self):
+
+    async def validate_data_loop(self) -> None:
         while True:
-            await self.CURRENT_HOLDER_STARTED.wait()
-            self.set_load_duty(50)
-            while self.CURRENT_HOLDER_STARTED.is_set():
-                params = await self.a_get_collected_parameters()
-                current = params.bat_current
-                if current < self.HELD_CURRENT:
-                    self.load.increase_current()
-                else:
-                    self.load.decrease_current()
+            errors = 0
+            
+            await DeviceManager.VALIDATE_LOOP_STARTED.wait()
+            
+            while DeviceManager.VALIDATE_LOOP_STARTED.is_set():
+                await asyncio.sleep(1)
+                data = await self.a_get_collected_parameters()
+                if DeviceManager.CURRENT_ACTION == CurrentActions.CHARGING:
+                    if data.temp_bat > self.charger.charge_settings.temp_bat_limit or \
+                            data.bat_current < self.charger.charge_settings.cut_off_current_mA:
+                        errors += 1
+                        if errors > 5:
+                            print("CHARGE STOPPED")
+                            self.stop_charging()
+                    else:
+                        errors = 0
+                if DeviceManager.CURRENT_ACTION == CurrentActions.DISCHARGING:
+                    if data.temp_bat > DeviceManager.DISCHARGE_CURRENT_SETTINGS.temp_bat_limit or \
+                            data.bat_voltage < DeviceManager.DISCHARGE_CURRENT_SETTINGS.dicharge_voltage_limit:
+                        errors += 1
+                        if errors > 5:
+                            print("CHARGE STOPPED")
+                            self.stop_discharging()
+                    else:
+                        errors = 0
+
+    def a_hold_current(self, test_data: TestData) -> None:
+        settings = DeviceManager.DISCHARGE_CURRENT_SETTINGS
+        current = test_data.load_current
+        if abs(settings.discharge_current - current) >= 5:
+            if current < settings.discharge_current:
+                self.load.increase_current(1)
+            else:
+                self.load.decrease_current(1)
 
     def collect_parameters(self) -> TestData:
         bat_voltage = self.multimeter.get_battery_mV()
@@ -257,24 +311,6 @@ class DeviceManager:
         )
         return test_data
 
-    async def acollect_parameters_json(self) -> str:
-        test_data = await self.acollect_parameters()
-        try:
-            self.parameters_validation(test_data=test_data)
-        except AssertionError as e:
-            print(e)
-            self.reset_all()
-        return dumps(test_data)
-
-    def collect_parameters_json(self) -> str:
-        test_data = self.collect_parameters()
-        try:
-            self.parameters_validation(test_data=test_data)
-        except AssertionError as e:
-            print(e)
-            self.reset_all()
-        return dumps(test_data)
-
     def get_load_duty(self) -> int:
         return self.load.get_duty()
 
@@ -283,9 +319,26 @@ class DeviceManager:
 
     def start_charging(self, settings: ChargerSettings):
         self.charger.start_charging(settings)
+        DeviceManager.CURRENT_ACTION = CurrentActions.CHARGING
+        DeviceManager.VALIDATE_LOOP_STARTED.set()
 
     def stop_charging(self):
         self.charger.set_charge_enable(False)
+        DeviceManager.CURRENT_ACTION = CurrentActions.NOTHING
+        DeviceManager.VALIDATE_LOOP_STARTED.clear()
+
+    def start_discharging(self, discharge_settings: DischargeSettings):
+        DeviceManager.DISCHARGE_CURRENT_SETTINGS = discharge_settings
+        print(discharge_settings)
+        self.set_load_duty(discharge_settings.start_duty)
+        DeviceManager.CURRENT_ACTION = CurrentActions.DISCHARGING
+        DeviceManager.VALIDATE_LOOP_STARTED.set()
+
+    def stop_discharging(self):
+        DeviceManager.DISCHARGE_CURRENT_SETTINGS = DischargeSettings()
+        self.set_load_duty(0)
+        DeviceManager.CURRENT_ACTION = CurrentActions.NOTHING
+        DeviceManager.VALIDATE_LOOP_STARTED.clear()
 
     def get_charging_settings(self) -> ChargerSettings:
         return BQ25895.charge_settings
@@ -294,14 +347,5 @@ class DeviceManager:
         self.charger.reset()
 
     def reset_all(self) -> None:
-        self.charger.reset()
-        self.load.set_duty(0)
-
-    def get_status(self) -> HeartBeatResponse:
-        status = self.STATUS
-        name = self.settings.device_name
-        ip = self.get_device_ip()
-        ch_status = self.charger.get_charger_status()
-
-        resp = HeartBeatResponse(device_status=status, device_name=name, device_ip=ip, charger_status=ch_status)
-        return resp
+        self.stop_charging()
+        self.start_discharging()

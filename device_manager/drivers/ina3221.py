@@ -261,20 +261,24 @@ class INA3221:
         self.battery_channel = 1
         self.load_channel = 2
         self.is_enabled(self.i2c_device)
-        self.write(C_REG_CONFIG,  C_AVERAGING_16_SAMPLES |
-                   C_VBUS_CONV_TIME_1MS |
-                   C_SHUNT_CONV_TIME_1MS |
-                   C_MODE_SHUNT_AND_BUS_CONTINOUS)
+        # self.write(C_REG_CONFIG,  C_AVERAGING_4_SAMPLES |
+        #            C_VBUS_CONV_TIME_1MS |
+        #            C_SHUNT_CONV_TIME_1MS |
+        #            C_MODE_SHUNT_AND_BUS_CONTINOUS)
 
-        self.update(reg=C_REG_CONFIG,
-                    mask=C_AVERAGING_MASK |
-                    C_VBUS_CONV_TIME_MASK |
-                    C_SHUNT_CONV_TIME_MASK |
-                    C_MODE_MASK,
-                    value=C_AVERAGING_1024_SAMPLES |
-                    C_VBUS_CONV_TIME_8MS |
-                    C_SHUNT_CONV_TIME_8MS |
-                    C_MODE_SHUNT_AND_BUS_CONTINOUS)
+        # self.update(reg=C_REG_CONFIG,
+        #             mask=C_AVERAGING_MASK |
+        #             C_VBUS_CONV_TIME_MASK |
+        #             C_SHUNT_CONV_TIME_MASK |
+        #             C_MODE_MASK,
+        #             value=C_AVERAGING_4_SAMPLES |
+        #             C_VBUS_CONV_TIME_8MS |
+        #             C_SHUNT_CONV_TIME_8MS |
+        #             C_MODE_SHUNT_AND_BUS_TRIGGERED)
+        self.write(C_REG_CONFIG,  C_AVERAGING_4_SAMPLES |
+                   C_VBUS_CONV_TIME_8MS |
+                   C_SHUNT_CONV_TIME_8MS |
+                   C_MODE_SHUNT_AND_BUS_TRIGGERED)
 
         def is_channel_enabled(self, channel=1):
             """Returns if a given channel is enabled or not"""

@@ -23,7 +23,7 @@ class TemperatureSensors:
         except Exception:
             raise Exception("Didn't convert with temperature sensors")
         d = dict()
-        await asyncio.sleep(0.75)
+        await asyncio.sleep(0.80)
         for addr in self.addresses_hex:
             try:
                 d[addr] = self.temp.read_temp(bytearray.fromhex(addr))

@@ -1,7 +1,7 @@
+import json
+from network import WLAN, STA_IF
 import gc
 from time import sleep
-from network import WLAN, STA_IF
-# from  ntptime import gmtime, settime
 print("STARTED")
 print(gc.mem_free())
 wlan = WLAN(STA_IF)
@@ -20,14 +20,14 @@ cfg = wlan.ipconfig('addr4')
 print(cfg)
 sleep(0.3)
 print("DONE")
-from server.microdot import Microdot
-from device_manager.drivers.bq25895 import ChargerSettings
-from device_manager.device_manager import DeviceManager, DeviceSettings
-import json
-import asyncio
 # import aiohttp
 gc.collect()
 
+import asyncio
+from device_manager.device_manager import DeviceManager, DeviceSettings
+from device_manager.drivers.bq25895 import ChargerSettings
+from server.microdot import Microdot
+from server.models import DischargeSettings, WriteSettings
 
 
 def garbage_collect(func):
@@ -54,6 +54,7 @@ d = get_env_dict()
 s = DeviceSettings(
     server_ip=d.get("SERVER_IP"),
     server_port=int(d.get("SERVER_PORT")),
+    announce_route=d.get("ANNOUNCE_ROUTE"),
     wifi_name=d.get("WIFI_NAME"),
     wifi_passw=d.get("WIFI_PASSW"),
     device_name=d.get("DEVICE_NAME"),
@@ -79,6 +80,7 @@ cfg = wlan.ipconfig('addr4')
 gc.collect()
 print(gc.mem_free())
 print(cfg)
+
 d = DeviceManager(cfg[0], s)
 
 app = Microdot()
@@ -117,35 +119,58 @@ async def start_charge(request):
                          const_volt_mV=data["const_volt_mV"],
                          cut_off_current_mA=data["cut_off_current_mA"],
                          temp_bat_limit=data["temp_bat_limit"])
+
     d.start_charging(cs)
 
 
 @garbage_collect
-@app.route("/set_load_duty")
+@app.route("/start_discharge")
 async def set_load_duty(request):
+    d.stop_charging()
     data = request.json
-    new_duty = int(data.get("new_duty"))
-    d.set_load_duty(new_duty)
+    discharge_current = int(data.get("discharge_current"))
+    start_duty = int(data.get("start_duty", 50))
+    limit_voltage = int(data.get("dicharge_voltage_limit", 2750))
+    bat_temp_limit = int(data.get("temp_bat_limit", 50))
+    settings = DischargeSettings(dicharge_voltage_limit=limit_voltage,
+                                 current=discharge_current,
+                                 start_duty=start_duty,
+                                 temp_bat_limit=bat_temp_limit)
+    d.start_discharging(settings)
+
+
+@garbage_collect
+@app.route("/stop_discharge")
+async def stop_discharge(request):
+    d.stop_discharging()
 
 
 @garbage_collect
 @app.route("/start_writing")
 async def start_sensors(request):
     data = request.json
-    DeviceManager.FILE_NAME = str(data.get("sd_file_name"))
-    DeviceManager.SENSOR_LOOP_STARTED.set()
+    file_name = str(data.get("sd_file_name", "test_data_params.txt"))
+    timeout = float(data.get("timeout", 1))
+    
+    with open(f'{d.SD_PATH}/{file_name}', "w") as f:
+        f.write("")
+        f.flush()
+                
+    DeviceManager.WRITE_SETTINGS = WriteSettings(sd_file_name=file_name, timeout=timeout)
+    DeviceManager.WRITE_LOOP_STARTED.set()
 
 
 @garbage_collect
 @app.route("/stop_writing")
 async def stop_sensors(request):
-    DeviceManager.SENSOR_LOOP_STARTED.clear()
+    DeviceManager.WRITE_LOOP_STARTED.clear()
 
 
 @garbage_collect
 @app.route("/get_sensors_data")
 async def get_sensors(request):
-    ...
+    test_data = await d.a_get_collected_parameters()
+    return json.dumps(test_data)
 
 
 @garbage_collect
@@ -159,17 +184,32 @@ async def heartbeat_route(request):
 @garbage_collect
 @app.route("/reset")
 async def reset_rout(request):
-    d.reset_all()
+    import machine
+    machine.reset()
 
-# import asyncio;asyncio.run(main())
+
+def set_exception_handler() -> None:
+    def handle_exception(loop, context):
+        d.stop_charging()
+        d.stop_discharging()
+        d.display.write(context["exception"])
+        print(context["exception"])
+        loop.stop()
+
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(handle_exception)
 
 
 async def main():
+    set_exception_handler()
     asyncio.create_task(app.start_server("0.0.0.0", 21216))
     asyncio.create_task(d.a_collect_data_loop())
     asyncio.create_task(d.a_show_parameters())
     asyncio.create_task(d.a_write_fs_loop())
+    # asyncio.create_task(d.a_send_device_announce_loop())
     while True:
         gc.collect()
         print(gc.mem_free())
         await asyncio.sleep(2)
+
+asyncio.run(main())
