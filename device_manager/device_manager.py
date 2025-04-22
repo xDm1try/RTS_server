@@ -188,7 +188,8 @@ class DeviceManager:
             cv = self.charger.get_charge_voltage() if "Pre-" not in self.charger.get_charge_state() \
                 else self.charger.get_precharge_threshold()
         duty = self.get_load_duty()
-        status: ChargerStatus = self.charger.get_charger_status()
+        bq_status: ChargerStatus = self.charger.get_charger_status()
+        status = "Discharge" if DeviceManager.CURRENT_ACTION == CurrentActions.DISCHARGING else bq_status.charge_status
         temp = await self.temp_sensors.aread_temperature()
         time_data = time.time()
         test_data = TestData(
@@ -198,7 +199,7 @@ class DeviceManager:
             bat_current=bat_current,
             bat_voltage=bat_voltage,
             load_duty=duty,
-            charge_status=status.charge_status,
+            charge_status=status,
             load_current=load_current,
             load_voltage=load_voltage,
             const_current=cc,
@@ -229,7 +230,7 @@ class DeviceManager:
                 with open(f"{self.SD_PATH}/{DeviceManager.WRITE_SETTINGS.sd_file_name}", "a") as f:
                     f.write(string)
                     f.flush()
-                    print(string)
+                    print("SD card: =>>", string)
                 gc.collect()
                 await asyncio.sleep(DeviceManager.WRITE_SETTINGS.timeout)
 
@@ -256,6 +257,8 @@ class DeviceManager:
                 await asyncio.sleep(1)
                 data = await self.a_get_collected_parameters()
                 if DeviceManager.CURRENT_ACTION == CurrentActions.CHARGING:
+                    print(f"CHARGE {data.temp_bat > self.charger.charge_settings.temp_bat_limit} or {data.bat_current < self.charger.charge_settings.cut_off_current_mA}")
+                    print(f"{errors=} {data.temp_bat=} {self.charger.charge_settings.temp_bat_limit=} {data.bat_current} {self.charger.charge_settings.cut_off_current_mA}")
                     if data.temp_bat > self.charger.charge_settings.temp_bat_limit or \
                             data.bat_current < self.charger.charge_settings.cut_off_current_mA:
                         errors += 1
@@ -265,11 +268,13 @@ class DeviceManager:
                     else:
                         errors = 0
                 if DeviceManager.CURRENT_ACTION == CurrentActions.DISCHARGING:
+                    print(f"CHARGE {data.temp_bat > DeviceManager.DISCHARGE_CURRENT_SETTINGS.temp_bat_limit} or {data.bat_voltage < DeviceManager.DISCHARGE_CURRENT_SETTINGS.dicharge_voltage_limit}")
+                    print(f"{errors=} {data.temp_bat=} {DeviceManager.DISCHARGE_CURRENT_SETTINGS.temp_bat_limit=} {data.bat_voltage} {DeviceManager.DISCHARGE_CURRENT_SETTINGS.dicharge_voltage_limit}")
                     if data.temp_bat > DeviceManager.DISCHARGE_CURRENT_SETTINGS.temp_bat_limit or \
                             data.bat_voltage < DeviceManager.DISCHARGE_CURRENT_SETTINGS.dicharge_voltage_limit:
                         errors += 1
                         if errors > 5:
-                            print("CHARGE STOPPED")
+                            print("DISHARGE STOPPED")
                             self.stop_discharging()
                     else:
                         errors = 0
@@ -277,7 +282,7 @@ class DeviceManager:
     def a_hold_current(self, test_data: TestData) -> None:
         settings = DeviceManager.DISCHARGE_CURRENT_SETTINGS
         current = test_data.load_current
-        if abs(settings.discharge_current - current) >= 5:
+        if abs(settings.discharge_current - current) >= 20:
             if current < settings.discharge_current:
                 self.load.increase_current(1)
             else:

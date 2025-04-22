@@ -190,10 +190,10 @@ async def reset_rout(request):
 
 def set_exception_handler() -> None:
     def handle_exception(loop, context):
+        print(context["exception"])
         d.stop_charging()
         d.stop_discharging()
         d.display.write(context["exception"])
-        print(context["exception"])
         loop.stop()
 
     loop = asyncio.get_event_loop()
@@ -206,6 +206,7 @@ async def main():
     asyncio.create_task(d.a_collect_data_loop())
     asyncio.create_task(d.a_show_parameters())
     asyncio.create_task(d.a_write_fs_loop())
+    asyncio.create_task(d.validate_data_loop())
     # asyncio.create_task(d.a_send_device_announce_loop())
     while True:
         gc.collect()
