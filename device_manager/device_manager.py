@@ -1,6 +1,9 @@
 import asyncio
 import gc
+import json
 import os
+
+import requests
 import aiohttp
 from device_manager.drivers.display.display_device import DisplayDevice
 from device_manager.drivers.l298n import L298N_short
@@ -11,7 +14,7 @@ from device_manager.drivers.temperature_sensors import TemperatureSensors
 
 # import os
 # from device_manager.drivers.sdcard import SDCard
-from server.models import TestData, DischargeSettings, WriteSettings
+from server.models import DeviceAnnounce, TestData, DischargeSettings, WriteSettings
 from ntptime import gmtime
 from machine import Pin, SoftI2C, PWM, SPI
 from onewire import OneWire
@@ -250,14 +253,15 @@ class DeviceManager:
     async def validate_data_loop(self) -> None:
         while True:
             errors = 0
-            
+
             await DeviceManager.VALIDATE_LOOP_STARTED.wait()
-            
+
             while DeviceManager.VALIDATE_LOOP_STARTED.is_set():
                 await asyncio.sleep(1)
                 data = await self.a_get_collected_parameters()
                 if DeviceManager.CURRENT_ACTION == CurrentActions.CHARGING:
-                    print(f"CHARGE {data.temp_bat > self.charger.charge_settings.temp_bat_limit} or {data.bat_current < self.charger.charge_settings.cut_off_current_mA}")
+                    print(
+                        f"CHARGE {data.temp_bat > self.charger.charge_settings.temp_bat_limit} or {data.bat_current < self.charger.charge_settings.cut_off_current_mA}")
                     print(f"{errors=} {data.temp_bat=} {self.charger.charge_settings.temp_bat_limit=} {data.bat_current} {self.charger.charge_settings.cut_off_current_mA}")
                     if data.temp_bat > self.charger.charge_settings.temp_bat_limit or \
                             data.bat_current < self.charger.charge_settings.cut_off_current_mA:
@@ -354,3 +358,20 @@ class DeviceManager:
     def reset_all(self) -> None:
         self.stop_charging()
         self.start_discharging()
+
+    async def a_send_device_announce_loop(self) -> None:
+        announce_url = f"http://{self.settings.server_ip.replace('"', "")}:" + \
+            f"{self.settings.server_port}/{self.settings.announce_route.replace('"', "")}"
+        while True:
+            await asyncio.sleep(5)
+            data = DeviceAnnounce(device_status=DeviceManager.CURRENT_ACTION,
+                                  device_ip=self.dev_ip,
+                                  device_name=self.settings.device_name,
+                                  sd_free_mem=self.get_free_sd_mem())
+            val = data.__dict__
+            try:
+                resp = requests.post(announce_url, json=val)
+                print(resp)
+                resp.close()
+            except Exception as e:
+                print(e)

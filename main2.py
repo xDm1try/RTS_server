@@ -81,17 +81,6 @@ d = DeviceManager(cfg[0], s)
 
 app = Microdot()
 
-# async def send_heartbeat_response_loop(d: DeviceManager):
-#     data = d.settings
-#     while True:
-#         resp = await d.get_status()
-#         resp = json.dumps(resp)
-#         async with aiohttp.ClientSession() as session:
-#             async with session.put(f'http://{data.server_ip}:{data.server_port}/device_announce',
-#                                    json=resp) as response:
-#                 print("Status:", response.status)
-#         await asyncio.sleep(5)
-
 
 @garbage_collect
 @app.route("/health")

@@ -85,17 +85,6 @@ d = DeviceManager(cfg[0], s)
 
 app = Microdot()
 
-# async def send_heartbeat_response_loop(d: DeviceManager):
-#     data = d.settings
-#     while True:
-#         resp = await d.get_status()
-#         resp = json.dumps(resp)
-#         async with aiohttp.ClientSession() as session:
-#             async with session.put(f'http://{data.server_ip}:{data.server_port}/device_announce',
-#                                    json=resp) as response:
-#                 print("Status:", response.status)
-#         await asyncio.sleep(5)
-
 
 @garbage_collect
 @app.route("/health")
@@ -108,6 +97,7 @@ async def health(request):
 @app.route("/stop_charge")
 async def stop_charge(request):
     d.stop_charging()
+    return {}
 
 
 @garbage_collect
@@ -121,6 +111,7 @@ async def start_charge(request):
                          temp_bat_limit=data["temp_bat_limit"])
 
     d.start_charging(cs)
+    return {}
 
 
 @garbage_collect
@@ -137,12 +128,14 @@ async def set_load_duty(request):
                                  start_duty=start_duty,
                                  temp_bat_limit=bat_temp_limit)
     d.start_discharging(settings)
+    return {}
 
 
 @garbage_collect
 @app.route("/stop_discharge")
 async def stop_discharge(request):
     d.stop_discharging()
+    return {}
 
 
 @garbage_collect
@@ -158,27 +151,21 @@ async def start_sensors(request):
                 
     DeviceManager.WRITE_SETTINGS = WriteSettings(sd_file_name=file_name, timeout=timeout)
     DeviceManager.WRITE_LOOP_STARTED.set()
+    return {}
 
 
 @garbage_collect
 @app.route("/stop_writing")
 async def stop_sensors(request):
     DeviceManager.WRITE_LOOP_STARTED.clear()
+    return {}
 
 
 @garbage_collect
 @app.route("/get_sensors_data")
 async def get_sensors(request):
     test_data = await d.a_get_collected_parameters()
-    return json.dumps(test_data)
-
-
-@garbage_collect
-@app.route('/heartbeat')
-async def heartbeat_route(request):
-    resp = await d.get_status()
-    resp = json.dumps(resp)
-    return resp
+    return test_data.__dict__
 
 
 @garbage_collect
@@ -186,6 +173,7 @@ async def heartbeat_route(request):
 async def reset_rout(request):
     import machine
     machine.reset()
+
 
 
 def set_exception_handler() -> None:
@@ -206,8 +194,8 @@ async def main():
     asyncio.create_task(d.a_collect_data_loop())
     asyncio.create_task(d.a_show_parameters())
     asyncio.create_task(d.a_write_fs_loop())
-    asyncio.create_task(d.validate_data_loop())
-    # asyncio.create_task(d.a_send_device_announce_loop())
+    # asyncio.create_task(d.validate_data_loop())
+    asyncio.create_task(d.a_send_device_announce_loop())
     while True:
         gc.collect()
         print(gc.mem_free())

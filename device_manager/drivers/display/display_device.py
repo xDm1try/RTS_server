@@ -61,6 +61,7 @@ class DisplayDevice:
         v += sysfont["Height"]
 
     def write(self, msg: str):
+        msg = str(msg)
         v = 0
         for line in msg.split("\n"):
             self.tft.text((0, v), line, self.tft.WHITE, sysfont, 1, nowrap=True)
