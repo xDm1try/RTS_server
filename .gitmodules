@@ -1,0 +1,6 @@
+[submodule "RBTS_backend"]
+	path = RBTS_backend
+	url = https://github.com/xDm1try/RBTS_backend.git
+[submodule "RBTS_frontend"]
+	path = RBTS_frontend
+	url = https://github.com/xDm1try/RBTS_frontend.git
